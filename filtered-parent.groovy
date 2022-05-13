@@ -56,3 +56,21 @@ void parse(List description) {
         }
     }
 }
+
+void removeChildrenExcept(String property, List childIds) {
+    def staleDevices = getChildDevices().
+        findAll
+        {
+            it.getDeviceNetworkId().endsWith("-${property}") &&
+                !childIds.contains(
+                    it.getDeviceNetworkId().
+                        minus("${device.deviceNetworkId}-").
+                        minus("-${property}")
+                )
+        }
+    if (staleDevices.any()) {
+        log.info "Removing ${staleDevices}, which are no longer selected"
+        staleDevices.each { deleteChildDevice(it.getDeviceNetworkId()) }
+    }
+
+}

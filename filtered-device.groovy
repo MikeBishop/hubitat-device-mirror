@@ -70,8 +70,11 @@ void installed() {
 }
 
 void initialize() {
+    def validPresenceSensors = presenceSensors.findAll { !myDevice(it.getDeviceNetworkId) }
     subscribe(presenceSensors, "presence", handler)
-    presenceSensors.each { refresh(it.getDeviceNetworkId()) }
+    def presenceIds = presenceSensors*.getDeviceNetworkId()
+    presenceIds.each { refresh(it) }
+    getParentDevice().removeChildrenExcept("Presence", presenceIds)
 }
 
 void refresh() {
@@ -80,8 +83,11 @@ void refresh() {
 
 void refresh(id) {
     def root = getParentDevice()
+    debug "Refreshing ${id}"
+    if( myDevice(id) ) {
+        return
+    }
     if (root) {
-        debug "Refreshing ${id}"
         def source = presenceSensors.find { it.getDeviceNetworkId() == id }
         if (source) {
             def currentState = [
@@ -109,4 +115,8 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
+}
+
+Boolean myDevice(id) {
+    return id && id.startsWith("Filtered-${app.id}-")
 }
