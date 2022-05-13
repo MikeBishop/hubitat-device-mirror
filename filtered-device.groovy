@@ -2,6 +2,12 @@
     Filtered Device Mirror
     Copyright 2022 Mike Bishop,  All Rights Reserved
 */
+import groovy.transform.Field
+
+@Field static final List DeviceTypes = [
+    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], driver: "Generic Component Presence Sensor"]
+]
+
 definition (
     name: "Filtered Device Mirror", namespace: "evequefou", author: "Mike Bishop", description: "Mirror one capability of a complex device",
     // importUrl: "TBD",
@@ -21,7 +27,9 @@ Map mainPage() {
 			if(thisName) app.updateLabel("$thisName")
         }
         section("Devices") {
-            input "presenceSensors", "capability.presenceSensor", title: "Presence devices to mirror", required: true, multiple: true
+            DeviceTypes.each {
+                input it.input, it.capability, title: "${it.type} devices to mirror", required: false, multiple: true
+            }
         }
         section("Settings") {
             input "debugSpew", "bool", title: "Log debug events", defaultValue: false
@@ -29,35 +37,17 @@ Map mainPage() {
     }
 }
 
-private createParentDevice() {
-    def parentDevice = getParentDevice()
+private getParentDevice() {
+    def dni = "Filtered-" + app.id.toString()
+    def parentDevice = getChildDevice(dni)
     if (!parentDevice) {
-        String dni = "Filtered-" + app.id.toString()
         debug "creating Filtered Device: ${dni}"
-        def device = addChildDevice("evequefou", "Filtered Devices", dni, null,
-             [name: "Filtered Devices", label: "Filtered Devices", completedSetup: true ])
+        parentDevice = addChildDevice("evequefou", "Filtered Devices", dni, null,
+             [name: "Filtered Devices", label: thisName ?: "Filtered Devices", completedSetup: true ])
     } else {
         parentDevice.initialize()
     }
     return parentDevice
-}
-
-def getParentDevice() {
-   def deviceIdStr = null
-   def device
-   if (state.childDeviceId) {
-      deviceIdStr = state.childDeviceId
-      device = getChildDevice(deviceIdStr)
-   }
-   if (!device) {
-      def devices = getChildDevices()
-      if (devices.size() > 0) {
-          deviceIdStr = getChildDevices().first().getDeviceNetworkId()
-          state.childDeviceId = deviceIdStr
-          device = getChildDevice(deviceIdStr)
-      }
-   }
-   return device
 }
 
 void updated() {
@@ -70,45 +60,68 @@ void installed() {
 }
 
 void initialize() {
-    def validPresenceSensors = presenceSensors.findAll { !myDevice(it.getDeviceNetworkId) }
-    subscribe(presenceSensors, "presence", handler)
-    def presenceIds = presenceSensors*.getDeviceNetworkId()
-    presenceIds.each { refresh(it) }
-    getParentDevice().removeChildrenExcept("Presence", presenceIds)
+    DeviceTypes.each {
+        def deviceType = it
+        def devices = settings[deviceType.input].findAll { !myDevice(it.getDeviceNetworkId) }
+        deviceType.properties.each {
+            subscribe(devices, it, handler)
+        }
+        def deviceIds = devices*.getDeviceNetworkId()
+        deviceIds.each {
+            refresh(it)
+        }
+        getParentDevice().removeChildrenExcept(deviceType.type, deviceIds)
+    }
 }
 
 void refresh() {
     initialize()
 }
 
-void refresh(id) {
+void refresh(id, properties = null) {
     def root = getParentDevice()
     debug "Refreshing ${id}"
     if( myDevice(id) ) {
         return
     }
     if (root) {
-        def source = presenceSensors.find { it.getDeviceNetworkId() == id }
-        if (source) {
-            def currentState = [
-                        id: id,
-                        name: source.getLabel() ?: source.getName(),
-                        type: "Presence",
-                        presence: source.currentValue("presence")
-                    ]
-            debug "Mirroring ${source} as ${currentState}"
-            root.parse([currentState])
+        def deviceTypes = DeviceTypes
+
+        // If we were told what properties to refresh, only care about types with
+        // those properties.
+        if (properties) {
+            deviceTypes = DeviceTypes.findAll{ it.properties.any {properties.contains(it) } }
         }
-        else {
-            log.warn "Sensor ${id} not found!"
+
+        deviceTypes.each {
+            def deviceType = it
+            def source = settings[deviceType.input].find { it.getDeviceNetworkId() == id }
+            if (source) {
+                def props = deviceType.properties
+                if( properties ) {
+                    props = props.findAll{ properties.contains(it) }
+                }
+                root.parse(
+                    properties.collect {
+                        [
+                            id: id,
+                            name: source.getLabel() ?: source.getName(),
+                            type: deviceType,
+                            properties: properties.collect {[
+                                name: it,
+                                value: source.currentValue(it)
+                            ]}
+                        ]
+                    }
+                )
+            }
         }
     }
-
 }
 
 void handler(evt) {
     debug "Received ${evt}"
-    refresh(evt.device.getDeviceNetworkId())
+    refresh(evt.device.getDeviceNetworkId(), [evt.name])
 }
 
 void debug(String msg) {
@@ -119,4 +132,8 @@ void debug(String msg) {
 
 Boolean myDevice(id) {
     return id && id.startsWith("Filtered-${app.id}-")
+}
+
+def getDeviceTypes() {
+    return DeviceTypes
 }

@@ -2,6 +2,7 @@
     Filtered Device Mirror
     Copyright 2022 Mike Bishop,  All Rights Reserved
 */
+import groovy.transform.Field
 
 metadata {
     definition (
@@ -26,8 +27,14 @@ void refresh() {
 }
 
 void componentRefresh(child) {
-    def childId = child.getDeviceNetworkId().minus("${device.deviceNetworkId}-").minus("-Presence")
-    parent.refresh(childId)
+    def childId = child.getDeviceNetworkId()
+    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
+    if (type) {
+        parent.refresh(
+            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}"),
+            type.properties
+        )
+    }
 }
 
 void parse(String description) { log.warn "parse(String description) not implemented" }
@@ -36,30 +43,23 @@ void parse(List description) {
     description.each {
         log.debug "Processing ${it}"
         def rootId = device.deviceNetworkId
-        def childId = "${rootId}-${it.id}-${it.type}"
-        def childLabel = "${it.name} ${it.type}"
+        def childId = "${rootId}-${it.id}-${it.type.type}"
+        def childLabel = "${it.name} ${it.type.type}"
         def cd = getChildDevice(childId)
         if (!cd) {
             // Child device doesn't exist; need to create it.
-            cd = addChildDevice("hubitat", "Generic Component Presence Sensor", childId, [isComponent: true])
+            cd = addChildDevice("hubitat", it.type.driver, childId, [isComponent: true])
             log.debug "Creating ${childLabel} (${childId})"
         }
         if (cd.getLabel() != childLabel ) {
-            cd.setLabel("${it.name} ${it.type}")
+            cd.setLabel("${it.name} ${it.type.type}")
         }
-        switch(it.type) {
-            case "Presence":
-                cd.parse(
-                    [[name: "presence", value: it.presence, descriptionText:"${it.name} is ${it.presence}"]]
-                )
-            break
-        }
+        cd.parse(it.properties)
     }
 }
 
 void removeChildrenExcept(String property, List childIds) {
-    def staleDevices = getChildDevices().
-        findAll
+    def staleDevices = getChildDevices().findAll
         {
             it.getDeviceNetworkId().endsWith("-${property}") &&
                 !childIds.contains(
