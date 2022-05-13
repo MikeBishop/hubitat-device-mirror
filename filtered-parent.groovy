@@ -9,7 +9,7 @@ metadata {
         name: "Filtered Devices",
         namespace: "evequefou",
         author: "Mike Bishop",
-        // importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-teslamate/main/hubitat-teslamate.groovy"
+        importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-device-mirror/main/filtered-parent.groovy"
     ) {
 
     }

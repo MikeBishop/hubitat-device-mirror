@@ -11,7 +11,7 @@ import groovy.transform.Field
 
 definition (
     name: "Filtered Device Mirror", namespace: "evequefou", author: "Mike Bishop", description: "Mirror one capability of a complex device",
-    // importUrl: "TBD",
+    importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-device-mirror/main/filtered-device.groovy",
     category: "My Apps",
     iconUrl: "",
     iconX2Url: ""
