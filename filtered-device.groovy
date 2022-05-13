@@ -5,7 +5,8 @@
 import groovy.transform.Field
 
 @Field static final List DeviceTypes = [
-    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], driver: "Generic Component Presence Sensor"]
+    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], driver: "Generic Component Presence Sensor"],
+    [type: "Power Meter", input: "powerMeters", capability: "capability.powerMeter", properties: ["power"], driver: "Generic Component Power Meter"]
 ]
 
 definition (
@@ -37,7 +38,7 @@ Map mainPage() {
     }
 }
 
-private getParentDevice() {
+private getRootDevice() {
     def dni = "Filtered-" + app.id.toString()
     def parentDevice = getChildDevice(dni)
     if (!parentDevice) {
@@ -60,6 +61,7 @@ void installed() {
 }
 
 void initialize() {
+    def root = getRootDevice()
     DeviceTypes.each {
         def deviceType = it
         def devices = settings[deviceType.input].findAll { !myDevice(it.getDeviceNetworkId) }
@@ -70,8 +72,9 @@ void initialize() {
         deviceIds.each {
             refresh(it)
         }
-        getParentDevice().removeChildrenExcept(deviceType.type, deviceIds)
+        root.removeChildrenExcept(deviceType.type, deviceIds)
     }
+    root.removeChildrenExcept("null", [])
 }
 
 void refresh() {
@@ -79,7 +82,7 @@ void refresh() {
 }
 
 void refresh(id, properties = null) {
-    def root = getParentDevice()
+    def root = getRootDevice()
     debug "Refreshing ${id}"
     if( myDevice(id) ) {
         return
