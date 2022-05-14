@@ -55,7 +55,7 @@ void parse(List description) {
         if (!cd) {
             // Child device doesn't exist; need to create it.
             debug "Creating ${childLabel} (${childId})"
-            cd = addChildDevice("hubitat", it.type.driver, childId, [isComponent: true])
+            cd = addChildDevice(it.type.namespace, it.type.driver, childId, [isComponent: true])
         }
         else {
             debug "${childId} is ${cd}"
