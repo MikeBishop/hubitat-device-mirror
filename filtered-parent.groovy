@@ -11,18 +11,24 @@ metadata {
         author: "Mike Bishop",
         importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-device-mirror/main/filtered-parent.groovy"
     ) {
-
-    }
-    preferences {
         capability "Initialize"
         capability "Refresh"
+    }
+    preferences {
+        input(
+            name: "debugLogging",
+            type: "bool",
+            title: "Enable debug logging",
+            required: false,
+            default: false
+        )
     }
 }
 
 void initialize() {}
 
 void refresh() {
-    log.debug "Refreshing"
+    debug "Refreshing"
     parent.refresh()
 }
 
@@ -41,18 +47,21 @@ void parse(String description) { log.warn "parse(String description) not impleme
 
 void parse(List description) {
     description.each {
-        log.debug "Processing ${it}"
+        debug "Processing ${it}"
         def rootId = device.deviceNetworkId
         def childId = "${rootId}-${it.id}-${it.type.type}"
         def childLabel = "${it.name} ${it.type.type}"
         def cd = getChildDevice(childId)
         if (!cd) {
             // Child device doesn't exist; need to create it.
+            debug "Creating ${childLabel} (${childId})"
             cd = addChildDevice("hubitat", it.type.driver, childId, [isComponent: true])
-            log.debug "Creating ${childLabel} (${childId})"
+        }
+        else {
+            debug "${childId} is ${cd}"
         }
         if (cd.getLabel() != childLabel ) {
-            cd.setLabel("${it.name} ${it.type.type}")
+            cd.setLabel(childLabel)
         }
         cd.parse(it.properties)
     }
@@ -73,4 +82,10 @@ void removeChildrenExcept(String property, List childIds) {
         staleDevices.each { deleteChildDevice(it.getDeviceNetworkId()) }
     }
 
+}
+
+def debug(msg) {
+	if (debugLogging) {
+    	log.debug msg
+    }
 }

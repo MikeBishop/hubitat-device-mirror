@@ -96,6 +96,7 @@ void refresh(id, properties = null) {
             deviceTypes = DeviceTypes.findAll{ it.properties.any {properties.contains(it) } }
         }
 
+        debug "Trying to refresh ${id} as ${deviceTypes}"
         deviceTypes.each {
             def deviceType = it
             def source = settings[deviceType.input].find { it.getDeviceNetworkId() == id }
@@ -105,17 +106,15 @@ void refresh(id, properties = null) {
                     props = props.findAll{ properties.contains(it) }
                 }
                 root.parse(
-                    properties.collect {
-                        [
-                            id: id,
-                            name: source.getLabel() ?: source.getName(),
-                            type: deviceType,
-                            properties: properties.collect {[
-                                name: it,
-                                value: source.currentValue(it)
-                            ]}
-                        ]
-                    }
+                    [[
+                        id: id,
+                        name: source.getLabel() ?: source.getName(),
+                        type: deviceType,
+                        properties: props.collect {[
+                            name: it,
+                            value: source.currentValue(it)
+                        ]}
+                    ]]
                 )
             }
         }
