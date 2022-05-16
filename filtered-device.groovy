@@ -93,32 +93,32 @@ void refresh(id, properties = null) {
     if (root) {
         def deviceTypes = DeviceTypes
 
-        // If we were told what properties to refresh, only care about types with
-        // those properties.
-        if (properties) {
-            deviceTypes = DeviceTypes.findAll{ it.properties.any {properties.contains(it) } }
-        }
-
-        debug "Trying to refresh ${id} as ${deviceTypes}"
+        debug "Trying to refresh ${id}"
         deviceTypes.each {
             def deviceType = it
-            def source = settings[deviceType.input].find { it.getDeviceNetworkId() == id }
-            if (source) {
-                def props = deviceType.properties
-                if( properties ) {
-                    props = props.findAll{ properties.contains(it) }
+            // If we were told what properties to refresh, only look at those
+            // properties.
+            def props = deviceType.properties
+            if( properties ) {
+                props = props.findAll{ properties.contains(it) }
+            }
+
+            // If that includes any properties for this type, refresh them.
+            if (props.size > 0) {
+                def source = settings[deviceType.input].find { it.getDeviceNetworkId() == id }
+                if (source) {
+                    root.parse(
+                        [[
+                            id: id,
+                            name: source.getLabel() ?: source.getName(),
+                            type: deviceType,
+                            properties: props.collect {[
+                                name: it,
+                                value: source.currentValue(it)
+                            ]}
+                        ]]
+                    )
                 }
-                root.parse(
-                    [[
-                        id: id,
-                        name: source.getLabel() ?: source.getName(),
-                        type: deviceType,
-                        properties: props.collect {[
-                            name: it,
-                            value: source.currentValue(it)
-                        ]}
-                    ]]
-                )
             }
         }
     }
