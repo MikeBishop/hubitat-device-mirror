@@ -25,7 +25,7 @@ preferences {
 Map mainPage() {
     dynamicPage(name: "Main Page", title: "Filtered Device Mirror", install: true, uninstall: true) {
         section("General") {
-            input "thisName", "text", title: "Name this Mirror Set", submitOnChange: true
+            input "thisName", "text", title: "Name this Mirror Set"
 			if(thisName) app.updateLabel("$thisName")
         }
         section("Devices") {
@@ -41,15 +41,17 @@ Map mainPage() {
 
 private getRootDevice() {
     def dni = "Filtered-" + app.id.toString()
-    def parentDevice = getChildDevice(dni)
-    if (!parentDevice) {
+    def rootDevice = getChildDevice(dni)
+    def rootLabel = thisName ?: "Filtered Devices"
+    if (!rootDevice) {
         debug "creating Filtered Device: ${dni}"
-        parentDevice = addChildDevice("evequefou", "Filtered Devices", dni, null,
-             [name: "Filtered Devices", label: thisName ?: "Filtered Devices", completedSetup: true ])
-    } else {
-        parentDevice.initialize()
+        rootDevice = addChildDevice("evequefou", "Filtered Devices", dni, null,
+             [name: "Filtered Devices", label: rootLabel, completedSetup: true ])
     }
-    return parentDevice
+    if (rootDevice.getLabel() != rootLabel) {
+        rootDevice.setLabel(rootLabel)
+    }
+    return rootDevice
 }
 
 void updated() {
