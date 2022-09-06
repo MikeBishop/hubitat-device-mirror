@@ -7,7 +7,8 @@ import groovy.transform.Field
 @Field static final List DeviceTypes = [
     [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
     [type: "Power Meter", input: "powerMeters", capability: "capability.powerMeter", properties: ["power"], namespace: "hubitat", driver: "Generic Component Power Meter"],
-    [type: "Power Source", input: "powerSources", capability: "capability.powerSource", properties: ["powerSource"], namespace: "evequefou", driver: "Generic Component Power Source Indicator"]
+    [type: "Power Source", input: "powerSources", capability: "capability.powerSource", properties: ["powerSource"], namespace: "evequefou", driver: "Generic Component Power Source Indicator"],
+    [type: "Switch", input: "switches", capability: "capability.switch", properties: ["switch"], namespace: "hubitat", driver: "Generic Component Switch"]
 ]
 
 definition (
