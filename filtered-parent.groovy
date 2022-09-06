@@ -43,6 +43,28 @@ void componentRefresh(child) {
     }
 }
 
+void componentOn(child) {
+    debug "componentOn: ${child}"
+    def childId = child.getDeviceNetworkId();
+    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
+    if (type?.type == "Switch") {
+        parent.mirrorOn(
+            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
+        )
+    }
+}
+
+void componentOff(child) {
+    debug "componentOff: ${child}"
+    def childId = child.getDeviceNetworkId();
+    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
+    if (type?.type == "Switch") {
+        parent.mirrorOff(
+            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
+        )
+    }
+}
+
 void parse(String description) { log.warn "parse(String description) not implemented" }
 
 void parse(List description) {
