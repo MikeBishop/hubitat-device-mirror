@@ -125,8 +125,22 @@ void refresh(id, properties = null) {
     }
 }
 
+void mirrorOn(id) {
+    def target = switches.find { it.getDeviceNetworkId() == id }
+    if (target) {
+        target.on()
+    }
+}
+
+void mirrorOff(id) {
+    def target = switches.find { it.getDeviceNetworkId() == id }
+    if (target) {
+        target.off()
+    }
+}
+
 void handler(evt) {
-    debug "Received ${evt}"
+    debug "Received ${evt.name} event (${evt.value}) from ${evt.device}"
     refresh(evt.device.getDeviceNetworkId(), [evt.name])
 }
 
