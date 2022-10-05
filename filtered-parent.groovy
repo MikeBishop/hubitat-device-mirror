@@ -32,6 +32,24 @@ void refresh() {
     parent.refresh()
 }
 
+void componentInvoke(child, targetMethod, args = []) {
+    // void mirrorFunc(def type, def id, def func, def... args) {
+    log.debug "componentInvoke: ${child} ${targetMethod} ${args}"
+    def childId = child.getDeviceNetworkId();
+    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
+    def baseId = childId.minus("${device.deviceNetworkId}-").minus("-${type.type}");
+
+    if (type) {
+        log.debug "calling mirrorFunc with ${type.type}, ${baseId}, ${targetMethod}, ${args}"
+        parent.mirrorFunc(
+            type.type,
+            baseId,
+            targetMethod,
+            *args
+        );
+    }
+}
+
 void componentRefresh(child) {
     def childId = child.getDeviceNetworkId()
     def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
@@ -45,24 +63,12 @@ void componentRefresh(child) {
 
 void componentOn(child) {
     debug "componentOn: ${child}"
-    def childId = child.getDeviceNetworkId();
-    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
-    if (type?.type == "Switch") {
-        parent.mirrorOn(
-            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
-        )
-    }
+    componentInvoke(child, "on");
 }
 
 void componentOff(child) {
     debug "componentOff: ${child}"
-    def childId = child.getDeviceNetworkId();
-    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
-    if (type?.type == "Switch") {
-        parent.mirrorOff(
-            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
-        )
-    }
+    componentInvoke(child, "off");
 }
 
 void parse(String description) { log.warn "parse(String description) not implemented" }
