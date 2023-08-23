@@ -36,9 +36,9 @@ void componentRefresh(child) {
     def childId = child.getDeviceNetworkId()
     def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
     if (type) {
-        parent.refresh(
+        parent.refreshById(
             childId.minus("${device.deviceNetworkId}-").minus("-${type.type}"),
-            type.properties
+            type
         )
     }
 }
