@@ -73,11 +73,9 @@ void initialize() {
         deviceType.properties.each {
             subscribe(devices, it, handler)
         }
-        def deviceIds = devices*.getDeviceNetworkId()
-        deviceIds.each {
-            refresh(it)
-        }
-        root.removeChildrenExcept(deviceType.type, deviceIds)
+
+        devices.each { refreshByDevice(it, deviceType) }
+        root.removeChildrenExcept(deviceType.type, devices*.getDeviceNetworkId())
     }
     root.removeChildrenExcept("null", [])
 }
@@ -86,44 +84,28 @@ void refresh() {
     initialize()
 }
 
-void refresh(id, properties = null) {
-    def root = getRootDevice()
-    debug "Refreshing ${id}"
-    if( myDevice(id) ) {
-        return
+void refreshById(id, type) {
+    def source = settings[type.input].find { it.getDeviceNetworkId() == id }
+    if( source ) {
+        refreshByDevice(source, type)
     }
-    if (root) {
-        def deviceTypes = DeviceTypes
-
-        debug "Trying to refresh ${id}"
-        deviceTypes.each {
-            def deviceType = it
-            // If we were told what properties to refresh, only look at those
-            // properties.
-            def props = deviceType.properties
-            if( properties ) {
-                props = props.findAll{ properties.contains(it) }
-            }
-
-            // If that includes any properties for this type, refresh them.
-            if (props.size > 0) {
-                def source = settings[deviceType.input].find { it.getDeviceNetworkId() == id }
-                if (source) {
-                    root.parse(
-                        [[
-                            id: id,
-                            name: source.getLabel() ?: source.getName(),
-                            type: deviceType,
-                            properties: props.collect {[
-                                name: it,
-                                value: source.currentValue(it)
-                            ]}
-                        ]]
-                    )
-                }
-            }
-        }
+    else {
+        warn "Could not find device ${id} of type ${type.type}"
     }
+}
+
+void refreshByDevice(source, type) {
+    getRootDevice().parse(
+        [[
+            id: source.getDeviceNetworkId(),
+            name: source.getLabel() ?: source.getName(),
+            type: type,
+            properties: type.properties.collect {[
+                name: it,
+                value: source.currentValue(it)
+            ]}
+        ]]
+    )
 }
 
 void mirrorOn(id) {
@@ -141,8 +123,28 @@ void mirrorOff(id) {
 }
 
 void handler(evt) {
-    debug "Received ${evt.name} event (${evt.value}) from ${evt.device}"
-    refresh(evt.device.getDeviceNetworkId(), [evt.name])
+    def debugString = "Received ${evt.name} event (${evt.value}) from ${evt.device}"
+    if( evt.descriptionText ) {
+        debugString += " (${evt.descriptionText})"
+    }
+    debug debugString
+    def root = getRootDevice()
+    def source = evt.device
+    DeviceTypes.findAll{ it.properties.contains(evt.name) }.each {
+        def deviceType = it
+        root.parse(
+            [[
+                id: source.getDeviceNetworkId(),
+                type: deviceType,
+                name: source.getLabel() ?: source.getName(),
+                properties: [[
+                    name: evt.name,
+                    value: evt.value,
+                    descriptionText: evt.descriptionText
+                ]]
+            ]]
+        )
+    }
 }
 
 void debug(String msg) {

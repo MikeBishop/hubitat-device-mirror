@@ -25,3 +25,4 @@ changes for the capability that you chose to expose.
 
 * [5/15/2022] Initial release
 * [10/5/2022] 1.1.0 - Add support for switches, including mirroring commands back
+* [8/23/2023] 1.1.1 - Pass through description text of events
