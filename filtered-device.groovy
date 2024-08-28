@@ -78,7 +78,8 @@ void initialize() {
         devices.each { refreshByDevice(it, deviceType) }
         root.removeChildrenExcept(deviceType.type, devices*.getDeviceNetworkId())
     }
-    root.removeChildrenExcept("null", [])
+    root.removeChildrenExcept("null", []);
+    root.removeChildrenExcept("Contact Sensor", []);
 }
 
 void refresh() {
