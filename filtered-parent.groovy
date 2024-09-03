@@ -1,6 +1,6 @@
 /*
     Filtered Device Mirror
-    Copyright 2022 Mike Bishop,  All Rights Reserved
+    Copyright 2022-2024 Mike Bishop,  All Rights Reserved
 */
 import groovy.transform.Field
 
@@ -43,26 +43,42 @@ void componentRefresh(child) {
     }
 }
 
-void componentOn(child) {
-    debug "componentOn: ${child}"
+void componentInvoke(child, targetMethod, args = []) {
+    // void mirrorFunc(def type, def id, def func, def... args) {
+    log.debug "componentInvoke: ${child} ${targetMethod} ${args}"
     def childId = child.getDeviceNetworkId();
     def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
-    if (type?.type == "Switch") {
-        parent.mirrorOn(
-            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
-        )
+    def baseId = childId.minus("${device.deviceNetworkId}-").minus("-${type.type}");
+
+    if (type) {
+        log.debug "calling mirrorFunc with ${type.type}, ${baseId}, ${targetMethod}, ${args}"
+        parent.mirrorFunc(
+            type.type,
+            baseId,
+            targetMethod,
+            args
+        );
     }
+}
+
+void componentOn(child) {
+    debug "componentOn: ${child}"
+    componentInvoke(child, "on");
 }
 
 void componentOff(child) {
     debug "componentOff: ${child}"
-    def childId = child.getDeviceNetworkId();
-    def type = parent.getDeviceTypes().find { childId.endsWith("-${it.type}")}
-    if (type?.type == "Switch") {
-        parent.mirrorOff(
-            childId.minus("${device.deviceNetworkId}-").minus("-${type.type}")
-        )
-    }
+    componentInvoke(child, "off");
+}
+
+void componentLock(child, ...args) {
+    debug "componentLock: ${child}, args: ${args}"
+    componentInvoke(child, "lock", args)
+}
+
+void componentUnlock(child, ...args) {
+    debug "componentUnlock: ${child}, args: ${args}"
+    componentInvoke(child, "unlock", args)
 }
 
 void parse(String description) { log.warn "parse(String description) not implemented" }
