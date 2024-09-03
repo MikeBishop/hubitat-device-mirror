@@ -5,14 +5,14 @@
 import groovy.transform.Field
 
 @Field static final List DeviceTypes = [
+    [type: "Battery", input: "batteries", capability: "capability.battery", properties: ["battery"], namespace: "evequefou", driver: "Generic Component Battery"],
     [type: "Contact", input: "contacts", capability: "capability.contactSensor", properties: ["contact"], namespace: "hubitat", driver: "Generic Component Contact Sensor"],
+    [type: "Lock", input: "locks", capability: "capability.lock", properties: ["lock"], namespace: "hubitat", driver: "Generic Component Lock", funcs: ["lock", "unlock"]],
     [type: "Motion", input: "motionSensors", capability: "capability.motionSensor", properties: ["motion"], namespace: "hubitat", driver: "Generic Component Motion Sensor"],
-    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
     [type: "Power Meter", input: "powerMeters", capability: "capability.powerMeter", properties: ["power"], namespace: "hubitat", driver: "Generic Component Power Meter"],
     [type: "Power Source", input: "powerSources", capability: "capability.powerSource", properties: ["powerSource"], namespace: "evequefou", driver: "Generic Component Power Source Indicator"],
+    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
     [type: "Switch", input: "switches", capability: "capability.switch", properties: ["switch"], namespace: "hubitat", driver: "Generic Component Switch", funcs: ["on", "off"]],
-    [type: "Battery", input: "batteries", capability: "capability.battery", properties: ["battery"], namespace: "evequefou", driver: "Generic Component Battery"],
-    [type: "Lock", input: "locks", capability: "capability.lock", properties: ["lock"], namespace: "hubitat", driver: "Generic Component Lock", funcs: ["lock", "unlock"]],
 ]
 
 definition (
