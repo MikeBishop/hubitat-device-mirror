@@ -1,16 +1,18 @@
 /*
     Filtered Device Mirror
-    Copyright 2022 Mike Bishop,  All Rights Reserved
+    Copyright 2022-2024 Mike Bishop,  All Rights Reserved
 */
 import groovy.transform.Field
 
 @Field static final List DeviceTypes = [
+    [type: "Battery", input: "batteries", capability: "capability.battery", properties: ["battery"], namespace: "evequefou", driver: "Generic Component Battery"],
     [type: "Contact", input: "contacts", capability: "capability.contactSensor", properties: ["contact"], namespace: "hubitat", driver: "Generic Component Contact Sensor"],
+    [type: "Lock", input: "locks", capability: "capability.lock", properties: ["lock"], namespace: "hubitat", driver: "Generic Component Lock", funcs: ["lock", "unlock"]],
     [type: "Motion", input: "motionSensors", capability: "capability.motionSensor", properties: ["motion"], namespace: "hubitat", driver: "Generic Component Motion Sensor"],
-    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
     [type: "Power Meter", input: "powerMeters", capability: "capability.powerMeter", properties: ["power"], namespace: "hubitat", driver: "Generic Component Power Meter"],
     [type: "Power Source", input: "powerSources", capability: "capability.powerSource", properties: ["powerSource"], namespace: "evequefou", driver: "Generic Component Power Source Indicator"],
-    [type: "Switch", input: "switches", capability: "capability.switch", properties: ["switch"], namespace: "hubitat", driver: "Generic Component Switch"],
+    [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
+    [type: "Switch", input: "switches", capability: "capability.switch", properties: ["switch"], namespace: "hubitat", driver: "Generic Component Switch", funcs: ["on", "off"]],
 ]
 
 definition (
@@ -110,17 +112,21 @@ void refreshByDevice(source, type) {
     )
 }
 
-void mirrorOn(id) {
-    def target = switches.find { it.getDeviceNetworkId() == id }
-    if (target) {
-        target.on()
+void mirrorFunc(def typeName, def id, def func, def args) {
+    def type = DeviceTypes.find { it.type == typeName }
+    def child = settings[type.input].find { it.getDeviceNetworkId() == id }
+    if (type.funcs.contains(func)) {
+        if (args.size() == 0) {
+            debug "Calling ${func} on ${typeName} ${id}"
+            child?."${func}"()
+        }
+        else {
+            debug "Calling ${func} on ${typeName} ${id} with args ${args}"
+            child?."${func}"(*args)
+        }
     }
-}
-
-void mirrorOff(id) {
-    def target = switches.find { it.getDeviceNetworkId() == id }
-    if (target) {
-        target.off()
+    else {
+        warn "Function ${func} is not supported for type ${typeName}"
     }
 }
 
@@ -153,6 +159,10 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
+}
+
+void warn(String msg) {
+    log.warn msg
 }
 
 Boolean myDevice(id) {
