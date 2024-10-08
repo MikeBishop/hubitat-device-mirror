@@ -28,3 +28,4 @@ changes for the capability that you chose to expose.
 * [8/23/2023] 1.1.1 - Pass through description text of events
 * [10/16/2023] 1.2.0 - Contact sensors
 * [9/16/2024] 1.3.0 - Batteries and locks (lock/unlock only, no codes)
+* [10/8/2024] 1.4.0 - Temperature sensors
