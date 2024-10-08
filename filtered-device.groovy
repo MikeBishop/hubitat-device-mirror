@@ -13,6 +13,7 @@ import groovy.transform.Field
     [type: "Power Source", input: "powerSources", capability: "capability.powerSource", properties: ["powerSource"], namespace: "evequefou", driver: "Generic Component Power Source Indicator"],
     [type: "Presence", input: "presenceSensors", capability: "capability.presenceSensor", properties: ["presence"], namespace: "hubitat", driver: "Generic Component Presence Sensor"],
     [type: "Switch", input: "switches", capability: "capability.switch", properties: ["switch"], namespace: "hubitat", driver: "Generic Component Switch", funcs: ["on", "off"]],
+    [type: "Temperature", input: "temperatures", capability: "capability.temperatureMeasurement", properties: ["temperature"], namespace: "hubitat", driver: "Generic Component Temperature Sensor"],
 ]
 
 definition (
