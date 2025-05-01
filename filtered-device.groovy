@@ -34,10 +34,13 @@ Map mainPage() {
             input "thisName", "text", title: "Name this Mirror Set"
 			if(thisName) app.updateLabel("$thisName")
         }
-        section("Devices") {
+        section("Simple Device Mirrors") {
             DeviceTypes.each {
                 input it.input, it.capability, title: "${it.type} devices to mirror", required: false, multiple: true
             }
+        }
+        section("Conditional Device Mirrors") {
+            app(name: "anyOpenApp", appName: "Conditional Filtered Device", namespace: "evequefou", title: "<b>Create a new conditional filter</b>", multiple: true)
         }
         section("Settings") {
             input "debugSpew", "bool", title: "Log debug events", defaultValue: false
