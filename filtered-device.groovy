@@ -48,6 +48,10 @@ Map mainPage() {
     }
 }
 
+public fetchChildDevice(childId, childLabel, namespace, driver) {
+    getRootDevice().fetchChildDevice(childId, childLabel, namespace, driver);
+}
+
 private getRootDevice() {
     def dni = "Filtered-" + app.id.toString()
     def rootDevice = getChildDevice(dni)
@@ -163,6 +167,10 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
+}
+
+Boolean debugEnabled() {
+    return debugSpew;
 }
 
 void warn(String msg) {

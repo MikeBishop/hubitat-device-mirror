@@ -89,20 +89,26 @@ void parse(List description) {
         def rootId = device.deviceNetworkId
         def childId = "${rootId}-${it.id}-${it.type.type}"
         def childLabel = "${it.name} ${it.type.type}"
-        def cd = getChildDevice(childId)
-        if (!cd) {
-            // Child device doesn't exist; need to create it.
-            debug "Creating ${childLabel} (${childId})"
-            cd = addChildDevice(it.type.namespace, it.type.driver, childId, [isComponent: true])
-        }
-        else {
-            debug "${childId} is ${cd}"
-        }
-        if (cd.getLabel() != childLabel ) {
-            cd.setLabel(childLabel)
-        }
+        def cd = this.fetchChildDevice(childId, childLabel, it.type.namespace, it.type.driver)
         cd.parse(it.properties)
     }
+}
+
+public fetchChildDevice(childId, childLabel, namespace, driver) {
+    def cd = getChildDevice(childId)
+    if (!cd) {
+        // Child device doesn't exist; need to create it.
+        debug "Creating ${childLabel} (${childId})"
+        cd = addChildDevice(namespace, driver, childId, [isComponent: true])
+    }
+    else {
+        debug "${childId} is ${cd}"
+    }
+    if (cd.getLabel() != childLabel ) {
+        cd.setLabel(childLabel)
+    }
+
+    return cd
 }
 
 void removeChildrenExcept(String property, List childIds) {
