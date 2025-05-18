@@ -118,7 +118,29 @@ Map mainPage() {
 
 void updated() {
 	unsubscribe()
+    cleanup()
 	initialize()
+}
+
+void cleanup() {
+    def firstAttribute = firstDevice.getSupportedAttributes().find { it.name == firstAttributeName }
+    def firstValues = firstAttribute.getValues()
+    def secondAttribute = secondDevice?.getSupportedAttributes()?.find { it.name == secondAttributeName }
+    def secondValues = secondAttribute?.getValues() ?: [null]
+
+    def goodKeys = firstValues.collect { it1 ->
+        secondValues.collect { it2 ->
+            "condition_${it1}${it2 != null ? "-${it2}" : ""}"
+        }
+    }.flatten()
+
+    debug "Good keys: ${goodKeys}"
+
+    def toRemove = settings.keySet().findAll { it.startsWith("condition_")} - goodKeys
+    debug "Removing keys: ${toRemove}"
+
+    toRemove.each { app.clearSetting(it) }
+
 }
 
 void installed() {
