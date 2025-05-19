@@ -94,15 +94,13 @@ Map mainPage() {
                         int width = Math.max(Math.floor(12.0 / numOptions), 1);
 
                         for (def secondValue in secondValues) {
-                            def key = "${prop}-${firstValue}${secondValue != null ? "-${secondValue}" : ""}"
-
                             def heading = "When ${firstDevice} ${firstAttribute.name} is ${firstValue}"
                             if( secondValue != null ) {
                                 heading += " and ${secondDevice} ${secondAttribute.name} is ${secondValue}"
                             }
                             heading += "..."
 
-                            input "condition_${key}", "enum", options: outputValues, width: width,
+                            input constructKey(prop, firstValue, secondValue), "enum", options: outputValues, width: width,
                                 title: heading, defaultValue: false, submitOnChange: true, required: true
                         }
                     }
@@ -140,7 +138,7 @@ void cleanup() {
     def goodKeys = outputProperties.collect { out ->
         firstValues.collect { it1 ->
             secondValues.collect { it2 ->
-                "condition_${out}-${it1}${it2 != null ? "-${it2}" : ""}"
+                constructKey(out, it1, it2)
             }
         }
     }.flatten()
@@ -197,13 +195,21 @@ void updateState(evt = null) {
             getChildDevice().parse(outputProperties.collect {
                 [
                     name: it,
-                    value: settings["condition_${it}-${firstValue}${secondValue != null ? "-${secondValue}" : ""}"],
+                    value: settings[constructKey(it, firstValue, secondValue)],
                     descriptionText: description
                 ]
             }.findAll{ it.value != UNCHANGED && it.value != null }
             );
         }
     }
+}
+
+private constructKey(outputAttribute, firstValue, secondValue) {
+    def key = "${outputAttribute}-${firstValue}"
+    if( secondValue != null ) {
+        key += "-${secondValue}"
+    }
+    return key
 }
 
 void refresh() {
