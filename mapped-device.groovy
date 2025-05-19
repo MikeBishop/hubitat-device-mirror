@@ -1,16 +1,16 @@
 /*
-    Conditional Filter
+    Mapped Device Filter
     Copyright 2025 Mike Bishop,  All Rights Reserved
 */
 import groovy.transform.Field
 
 definition (
     parent: "evequefou:Filtered Device Mirror",
-    name: "Conditional Filtered Device",
+    name: "Mapped Device",
     namespace: "evequefou",
     author: "Mike Bishop",
-    description: "Mirror one capability of a complex device with conditional filtering",
-    importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-device-mirror/main/conditional-filter.groovy",
+    description: "Mirror one capability of a device with mapping logic",
+    importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-device-mirror/main/mapped-device.groovy",
     category: "Lighting",
     iconUrl: "",
     iconX2Url: ""
@@ -21,9 +21,9 @@ preferences {
 }
 
 Map mainPage() {
-    dynamicPage(name: "mainPage", title: "Conditional Filtered Device Mirror", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Mapped Device Mirror", install: true, uninstall: true) {
         section("General") {
-            input "thisName", "text", title: "Name this Conditional Mirror", required: true, defaultValue: app.getLabel(), submitOnChange: true
+            input "thisName", "text", title: "Name this Mapped Device", required: true, defaultValue: app.getLabel(), submitOnChange: true
             if(thisName) app.updateLabel("$thisName")
         }
         section("Device Selection") {
@@ -74,7 +74,8 @@ Map mainPage() {
                         If a given device is a number, first have splitpoints,
                         then build a selector for each range.
                         If a given device is a string, assemble a list of
-                        possible values and build a selector for each.
+                        possible values and build a selector for each, plus
+                        "anything else"
 
                         If outputs are strings, have a text box (support
                         variables?)

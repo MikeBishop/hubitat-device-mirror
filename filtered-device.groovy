@@ -39,8 +39,8 @@ Map mainPage() {
                 input it.input, it.capability, title: "${it.type} devices to mirror", required: false, multiple: true
             }
         }
-        section("Conditional Device Mirrors") {
-            app(name: "anyOpenApp", appName: "Conditional Filtered Device", namespace: "evequefou", title: "<b>Create a new conditional filter</b>", multiple: true)
+        section("Mapped Device Mirrors") {
+            app(name: "anyOpenApp", appName: "Mapped Device", namespace: "evequefou", title: "<b>Create a new mapped device</b>", multiple: true)
         }
         section("Settings") {
             input "debugSpew", "bool", title: "Log debug events", defaultValue: false
