@@ -37,7 +37,7 @@ Map mainPage() {
                 def deviceLabel = "${device[0].capitalize()} input device"
                 def required = device[1]
 
-                input deviceKey, "capability.*", title: deviceLabel, required: required, multiple: false
+                input deviceKey, "capability.*", title: deviceLabel, required: required, multiple: false, submitOnChange: true
 
                 if(settings[deviceKey] ) {
                     def inputDevice = settings[deviceKey]
@@ -163,9 +163,10 @@ private getChildDevice() {
 }
 
 void initialize() {
-    [[firstDevice,firstAttribute], [secondDevice,secondAttribute]].each {
+    [[firstDevice,firstAttributeName], [secondDevice,secondAttributeName]].each {
         def device = it[0];
         def attribute = it[1];
+        debug "Subscribing to ${device} ${attribute}"
 
         if( device && attribute ) {
             subscribe(device, attribute, "updateState")
