@@ -34,15 +34,22 @@ Map mainPage() {
             input "thisName", "text", title: "Name this Mirror Set"
 			if(thisName) app.updateLabel("$thisName")
         }
-        section("Devices") {
+        section("Simple Device Mirrors") {
             DeviceTypes.each {
                 input it.input, it.capability, title: "${it.type} devices to mirror", required: false, multiple: true
             }
+        }
+        section("Mapped Device Mirrors") {
+            app(name: "anyOpenApp", appName: "Mapped Device", namespace: "evequefou", title: "<b>Create a new mapped device</b>", multiple: true)
         }
         section("Settings") {
             input "debugSpew", "bool", title: "Log debug events", defaultValue: false
         }
     }
+}
+
+public fetchChildDevice(childId, childLabel, namespace, driver) {
+    getRootDevice().fetchChildDevice(childId, childLabel, namespace, driver);
 }
 
 private getRootDevice() {
@@ -160,6 +167,10 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
+}
+
+Boolean debugEnabled() {
+    return debugSpew;
 }
 
 void warn(String msg) {
