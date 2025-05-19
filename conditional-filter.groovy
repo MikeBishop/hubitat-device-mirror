@@ -68,13 +68,20 @@ Map mainPage() {
                     def outputAttribute = getChildDevice().getSupportedAttributes().find { it.name == prop }
 
                     /*
-                        If the devices are enums, just build a selector for each combination.
+                        TODO: Non-enum types will come later
+
+                        If the inputs are enums, just build a selector for each combination.
                         If a given device is a number, first have splitpoints,
                         then build a selector for each range.
                         If a given device is a string, assemble a list of
                         possible values and build a selector for each.
 
-                        TODO: Non-enum types will come later
+                        If outputs are strings, have a text box (support
+                        variables?)
+                        If outputs are numbers, support:
+                        - Fixed
+                        - Variable plus fixed offset
+                        - Input (if number) plus fixed/variable/other-input offset
                         */
 
                     def firstValues = firstAttribute.getValues()
@@ -86,7 +93,7 @@ Map mainPage() {
                         int width = Math.max(Math.floor(12.0 / numOptions), 1);
 
                         for (def secondValue in secondValues) {
-                            def key = "${firstValue}${secondValue != null ? "-${secondValue}" : ""}"
+                            def key = "${prop}-${firstValue}${secondValue != null ? "-${secondValue}" : ""}"
 
                             def heading = "When ${firstDevice} ${firstAttribute.name} is ${firstValue}"
                             if( secondValue != null ) {
@@ -123,14 +130,17 @@ void updated() {
 }
 
 void cleanup() {
-    def firstAttribute = firstDevice.getSupportedAttributes().find { it.name == firstAttributeName }
-    def firstValues = firstAttribute.getValues()
+    def firstAttribute = firstDevice?.getSupportedAttributes()?.find { it.name == firstAttributeName }
+    def firstValues = firstAttribute?.getValues() ?: []
     def secondAttribute = secondDevice?.getSupportedAttributes()?.find { it.name == secondAttributeName }
     def secondValues = secondAttribute?.getValues() ?: [null]
+    def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
 
-    def goodKeys = firstValues.collect { it1 ->
-        secondValues.collect { it2 ->
-            "condition_${it1}${it2 != null ? "-${it2}" : ""}"
+    def goodKeys = outputProperties.collect { out ->
+        firstValues.collect { it1 ->
+            secondValues.collect { it2 ->
+                "condition_${out}-${it1}${it2 != null ? "-${it2}" : ""}"
+            }
         }
     }.flatten()
 
@@ -140,7 +150,6 @@ void cleanup() {
     debug "Removing keys: ${toRemove}"
 
     toRemove.each { app.clearSetting(it) }
-
 }
 
 void installed() {
@@ -154,6 +163,45 @@ private getChildDevice() {
 }
 
 void initialize() {
+    [[firstDevice,firstAttribute], [secondDevice,secondAttribute]].each {
+        def device = it[0];
+        def attribute = it[1];
+
+        if( device && attribute ) {
+            subscribe(device, attribute, "updateState")
+        }
+    }
+    updateState();
+}
+
+void updateState(evt = null) {
+    def source = evt?.device;
+    def property = evt?.name;
+    def value = evt?.value;
+    def description = evt?.descriptionText
+
+    if( evt ) {
+        debug "Received ${property} ${value} from ${source} ${description ?: ""}"
+        description = description ?: " ${source} ${property} became ${value}"
+    }
+
+    def firstValue = firstDevice?.currentValue(firstAttributeName);
+    def secondValue = secondDevice?.currentValue(secondAttributeName);
+    def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
+
+    if ( firstValue != null ) {
+        if( firstDevice && firstAttributeName && outputCapability ) {
+            def properties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
+            getChildDevice().parse(outputProperties.collect {
+                [
+                    name: it,
+                    value: settings["condition_${it}-${firstValue}${secondValue != null ? "-${secondValue}" : ""}"],
+                    descriptionText: description
+                ]
+            }.findAll{ it.value != UNCHANGED && it.value != null }
+            );
+        }
+    }
 }
 
 void refresh() {
