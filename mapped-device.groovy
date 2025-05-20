@@ -155,10 +155,17 @@ void installed() {
 	initialize()
 }
 
+void uninstalled() {
+    parent.deleteChildDevice(getChildDeviceId())
+}
+
+private getChildDeviceId() {
+    return "Filtered-" + app.id.toString()
+}
+
 private getChildDevice() {
-    def dni = "Filtered-" + app.id.toString()
     def type = parent.getDeviceTypes().find { it.capability == outputCapability }
-    return parent.fetchChildDevice(dni, thisName, type.namespace, type.driver)
+    return parent.fetchChildDevice(getChildDeviceId(), thisName, type.namespace, type.driver)
 }
 
 void initialize() {
