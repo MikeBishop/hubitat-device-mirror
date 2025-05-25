@@ -111,6 +111,14 @@ public fetchChildDevice(childId, childLabel, namespace, driver) {
     return cd
 }
 
+void removeChildDevice(childId) {
+    def cd = getChildDevice(childId)
+    if (cd) {
+        debug "Removing ${childId}"
+        deleteChildDevice(cd.deviceNetworkId)
+    }
+}
+
 void removeChildrenExcept(String property, List childIds) {
     def staleDevices = getChildDevices().findAll
         {

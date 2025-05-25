@@ -52,6 +52,10 @@ public fetchChildDevice(childId, childLabel, namespace, driver) {
     getRootDevice().fetchChildDevice(childId, childLabel, namespace, driver);
 }
 
+public removeChildDevice(childId) {
+    getRootDevice().removeChildDevice(childId);
+}
+
 private getRootDevice() {
     def dni = "Filtered-" + app.id.toString()
     def rootDevice = getChildDevice(dni)
