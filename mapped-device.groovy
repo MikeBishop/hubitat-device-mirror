@@ -349,7 +349,8 @@ void appButtonHandler(String button) {
         }
     }
     if( action == "Delete" ) {
-        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] - 1
+        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] - 1;
+        cleanup()
     }
 }
 
