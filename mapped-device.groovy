@@ -156,6 +156,7 @@ Map mainPage() {
 // Returns array of objects, types varying by attribute type:
 // - For all types, includes keySlug, displayTitle(), and displayFull()
 // - For NUMBER, includes min, max, minKey, and maxKey for defining splitpoints
+// - For ENUM and STRING, includes exact
 def getValues(devicePrefix) {
     def attribute = settings["${devicePrefix}Device"]?.getSupportedAttributes()?.find { it.name == settings["${devicePrefix}AttributeName"] }
 
@@ -192,6 +193,7 @@ def getValues(devicePrefix) {
                 def title = { it }
                 [
                     keySlug: it,
+                    exact: it,
                     displayTitle: title,
                     displayFull: title
                 ]
@@ -477,13 +479,44 @@ void updateState(evt = null) {
             getChildDevice().parse(outputProperties.collect {
                 [
                     name: it,
-                    value: settings[constructKey(it, firstValue, secondValue)],
+                    value: outputFromInputs(it, firstValue, secondValue),
                     descriptionText: description
                 ]
             }.findAll{ it.value != UNCHANGED && it.value != null }
             );
         }
     }
+}
+
+private outputFromInputs(outputAttribute, firstValue, secondValue) {
+    def values = [
+        firstIn: firstValue,
+        firstKey: null,
+        secondIn: secondValue,
+        secondKey: null
+    ];
+
+    ["first", "second"].each { devicePrefix ->
+        def options = getValues(devicePrefix);
+        def inputValue = values["${devicePrefix}In"];
+        values["${devicePrefix}Key"] = options.find { it.exact == inputValue }?.keySlug;
+        if( !values["${devicePrefix}Key"] ) {
+            // If we don't have an exact match, try to find a range
+            def range = options.find {
+                (inputValue >= it.min || it.min == null) &&
+                (inputValue < it.max || it.max == null) };
+            if( range ) {
+                values["${devicePrefix}Key"] = range.keySlug;
+            }
+            log.warn "No match for ${devicePrefix} value ${inputValue}, using range ${options.inspect()}"
+        }
+    }
+
+    def result = getValue(outputAttribute, values.firstKey, values.secondKey);
+    debug "Output for ${outputAttribute} with first ${values.firstIn} (${values.firstKey}) and second ${values.secondIn} (${values.secondKey}) is ${result}"
+    // UNCHANGED is a special value that is handled by
+    // the caller; other specials are handled here. (TODO)
+    return result ?: UNCHANGED;
 }
 
 private getValue(outputAttribute, firstValue, secondValue = null) {
