@@ -67,11 +67,13 @@ Map mainPage() {
                                     state["${devicePrefix}SplitpointCount"] = splitpointCount = 0
                                 }
                                 (0..splitpointCount).each { i ->
+                                    def previousSplitpointKey = "${devicePrefix}_Splitpoint_${i-1}"
                                     def splitpointKey = "${devicePrefix}_Splitpoint_${i}"
+                                    def nextSplitpointKey = "${devicePrefix}_Splitpoint_${i+1}"
                                     debug "Splitpoint ${i} (${splitpointKey}) of ${splitpointCount}"
                                     if( i < splitpointCount ) {
-                                        def lowerBound = i == 0 ? "*" : (settings["${devicePrefix}Splitpoint${i-1}"] ?: "*")
-                                        def upperBound = i == splitpointCount ? "*" : (settings["${devicePrefix}Splitpoint${i}"] ?: "*")
+                                        def lowerBound = i == 0 ? "*" : (settings[previousSplitpointKey] ?: "*")
+                                        def upperBound = i == splitpointCount ? "*" : (settings[nextSplitpointKey] ?: "*")
                                         def range = "${lowerBound}..${upperBound}";
                                         debug "Range for ${splitpointKey} is ${range}"
                                         input splitpointKey, "decimal", title: splitpointToRange(devicePrefix, i, false),
@@ -376,6 +378,20 @@ void cleanup() {
     debug "Removing keys: ${toRemove}"
 
     toRemove.each { app.clearSetting(it) }
+
+    ["first", "second"].each { devicePrefix ->
+        def splitpointCount = state["${devicePrefix}SplitpointCount"].toInteger() ?: 0
+        debug "Cleaning up splitpoints for ${devicePrefix} with count ${splitpointCount}"
+        // Remove splitpoints that are no longer needed
+        settings.keySet().findAll { it.startsWith("${devicePrefix}_Splitpoint_") }.each { key ->
+            def index = key.split("_").last().toInteger()
+            if( index >= splitpointCount ) {
+                debug "Removing splitpoint ${key} as it is no longer needed"
+                app.clearSetting(key)
+            }
+        }
+    }
+
 }
 
 void installed() {
