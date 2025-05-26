@@ -213,17 +213,142 @@ String splitpointToRange(devicePrefix, i, includeEndpoint) {
 }
 
 void appButtonHandler(String button) {
+    debug "Button pressed: ${button}"
     def components = button.split("_")
+    if( components.size() != 4 ) {
+        log.warn "Invalid button name ${button}"
+        return
+    }
     def action = components[0]
+    if( !["Delete", "Divide"].contains(action) ) {
+        log.warn "Invalid action ${action} in button name ${button}"
+        return
+    }
+
     def devicePrefix = components[1]
-    def index = components[3]
-    def splitpointCount = state["${devicePrefix}SplitpointCount"]
+    if( !["first", "second"].contains(devicePrefix) ) {
+        log.warn "Invalid device prefix ${devicePrefix} in button name ${button}"
+        return
+    }
+
+    def index = components[3].toInteger()
+
+    if (outputCapability) {
+        def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }?.properties
+        if (!outputProperties) {
+            log.warn "No properties found for output capability: ${outputCapability}"
+            return
+        }
+    } else {
+        log.warn "Output capability is not set"
+        return
+    }
 
     def firstOffset = devicePrefix == "first" ?
         action == "Divide" ? 1 : -1 : 0;
     def secondOffset = devicePrefix == "second" ?
         action == "Divide" ? 1 : -1 : 0;
 
+    if( action == "Divide" ) {
+        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] + 1
+    }
+
+    def firstValues = getValues("first").collect{it[0]}
+    def secondValues = getValues("second").collect{it[0]}
+
+    // --- Data structure to hold dynamic info for first/second ---
+    def deviceContext = [
+        "first": [
+            values: firstValues,
+            offset: firstOffset,
+            range: null // Will be populated
+        ],
+        "second": [
+            values: secondValues,
+            offset: secondOffset,
+            range: null // Will be populated
+        ]
+    ]
+
+    // --- Loop to reduce duplication for range calculation ---
+    ["first", "second"].each { currentPrefix ->
+        def currentValues = deviceContext[currentPrefix].values
+        def currentRange
+
+        if (devicePrefix == currentPrefix) { // This is the device being affected by the action
+            if (action == "Divide") {
+                // Divide: Shift elements from 'index' onwards UP by 1.
+                // Source: i, Dest: i+1
+                // Iterate from last element down to index.
+                currentRange = (currentValues.size() - 1)..index // Inclusive range
+            } else { // action == "Delete"
+                // Delete: Shift elements from 'index' + 1 onwards DOWN by 1.
+                // Source: i, Dest: i-1
+                // Iterate from index + 1 up to size - 1.
+                currentRange = (index + 1)..(currentValues.size() - 1)
+            }
+        } else { // This is the other device, it iterates over its full existing range.
+            currentRange = (0)..(currentValues.size() - 1)
+        }
+        currentRange = currentRange.toList() // Ensure it's a list for consistent iteration
+
+        deviceContext[currentPrefix].range = currentRange
+        debug "${currentPrefix.capitalize()} range: ${currentRange}"
+    }
+
+    // Extract the calculated ranges back to their original variables for clarity in loops below
+    def firstRange = deviceContext.first.range
+    def secondRange = deviceContext.second.range
+    def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
+
+    debug "First values: ${firstValues}"
+    debug "Second values: ${secondValues}"
+    debug "Output properties: ${outputProperties}"
+    debug "Iterating ${devicePrefix} ${index} (firstRange: ${firstRange} and secondRange: ${secondRange})"
+
+    outputProperties.each { out ->
+        firstRange.each { i ->
+            debug "First source index ${i}"
+            def firstSourceValue = firstValues[i]
+            def firstDestIndex = i + firstOffset
+
+            def firstDestValue
+            try {
+                firstDestValue = firstValues[firstDestIndex]
+            } catch (IndexOutOfBoundsException e) {
+                firstDestValue = null
+                debug "Warning: firstDestIndex ${firstDestIndex} was out of bounds for firstValues. Assuming null."
+            }
+
+            secondRange.each { j ->
+                debug "Second source index ${j}"
+                def secondSourceValue = secondValues[j]
+                def secondDestIndex = j + secondOffset
+
+                def secondDestValue
+                try {
+                    secondDestValue = secondValues[secondDestIndex]
+                } catch (IndexOutOfBoundsException e) {
+                    secondDestValue = null
+                    debug "Warning: secondDestIndex ${secondDestIndex} was out of bounds for secondValues. Assuming null."
+                }
+
+                def sourceKey = constructKey(out, firstSourceValue, secondSourceValue)
+                def data = getValue(out, firstSourceValue, secondSourceValue)
+                def destKey = constructKey(out, firstDestValue, secondDestValue)
+                debug "Copying ${sourceKey} to ${destKey} (${data})"
+
+                if( data != null ) {
+                    app.updateSetting(destKey, data)
+                } else {
+                    app.clearSetting(destKey)
+                }
+            }
+        }
+    }
+    if( action == "Delete" ) {
+        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] - 1
+    }
 }
 
 void updated() {
@@ -233,10 +358,8 @@ void updated() {
 }
 
 void cleanup() {
-    def firstAttribute = firstDevice?.getSupportedAttributes()?.find { it.name == firstAttributeName }
-    def firstValues = firstAttribute?.getValues() ?: []
-    def secondAttribute = secondDevice?.getSupportedAttributes()?.find { it.name == secondAttributeName }
-    def secondValues = secondAttribute?.getValues() ?: [null]
+    def firstValues = getValues("first").collect{it[0]}
+    def secondValues = getValues("second").collect{it[0]}
     def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
 
     def goodKeys = outputProperties.collect { out ->
