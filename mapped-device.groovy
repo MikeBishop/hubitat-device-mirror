@@ -62,28 +62,23 @@ Map mainPage() {
                         switch(attribute.dataType) {
                             case "NUMBER":
                                 // Need to build a list of splitpoints
-                                def splitpointCount = state["${devicePrefix}SplitpointCount"]
-                                if( !splitpointCount ) {
-                                    state["${devicePrefix}SplitpointCount"] = splitpointCount = 0
-                                }
-                                (0..splitpointCount).each { i ->
-                                    def previousSplitpointKey = "${devicePrefix}_Splitpoint_${i-1}"
-                                    def splitpointKey = "${devicePrefix}_Splitpoint_${i}"
-                                    def nextSplitpointKey = "${devicePrefix}_Splitpoint_${i+1}"
-                                    debug "Splitpoint ${i} (${splitpointKey}) of ${splitpointCount}"
-                                    if( i < splitpointCount ) {
-                                        def lowerBound = i == 0 ? "*" : (settings[previousSplitpointKey] ?: "*")
-                                        def upperBound = i == splitpointCount ? "*" : (settings[nextSplitpointKey] ?: "*")
+                                def values = getValues(devicePrefix)
+                                debug "Values for ${devicePrefix} are ${values.inspect()}"
+                                values.eachWithIndex { value, i ->
+                                    debug "Adding input for ${devicePrefix} ${value.keySlug} (${value.inspect()})"
+                                    if( value.maxKey ) {
+                                        def lowerBound = value.min ?: "*"
+                                        def upperBound = value.max ?: "*"
                                         def range = "${lowerBound}..${upperBound}";
-                                        debug "Range for ${splitpointKey} is ${range}"
-                                        input splitpointKey, "decimal", title: splitpointToRange(devicePrefix, i, false),
+                                        debug "Range for ${value.maxKey} is ${range}"
+                                        input value.maxKey, "decimal", title: value.displayTitle(),
                                             range: range, required: true, submitOnChange: true, width: 6
                                     } else {
-                                        paragraph splitpointToRange(devicePrefix, i, true), width: 6
+                                        paragraph value.displayFull(), width: 6
                                     }
-                                    input "Divide_${splitpointKey}", "button", title: "Split", submitOnChange: true, width: 3
-                                    if( i < splitpointCount ) {
-                                        input "Delete_${splitpointKey}", "button", title: "Delete", submitOnChange: true, width: 3
+                                    input "Divide_${devicePrefix}_${i}", "button", title: "Split", submitOnChange: true, width: 3
+                                    if( value.max ) {
+                                        input "Delete_${devicePrefix}_${i}", "button", title: "Delete", submitOnChange: true, width: 3
                                     }
                                 }
                                 break;
@@ -133,14 +128,14 @@ Map mainPage() {
                     def outputValues = (outputAttribute?.getValues() ?: []) + [UNCHANGED];
 
                     for (def firstValue in firstValues) {
-                        def firstKey = firstValue[0]
-                        def firstDisplay = firstValue[1]
+                        def firstKey = firstValue.keySlug
+                        def firstDisplay = firstValue.displayFull()
                         int numOptions = Math.max(secondValues.size(), 1);
                         int width = Math.max(Math.floor(12.0 / numOptions), 1);
 
                         for (def secondValue in secondValues) {
-                            def secondKey = secondValue[0]
-                            def secondDisplay = secondValue[1]
+                            def secondKey = secondValue.keySlug
+                            def secondDisplay = secondValue.displayFull()
 
                             def heading = "When ${firstDevice} ${firstAttributeName} is ${firstDisplay}"
                             if( secondValue != null ) {
@@ -158,7 +153,9 @@ Map mainPage() {
     }
 }
 
-// Returns array of pairs, key name and display string
+// Returns array of objects, types varying by attribute type:
+// - For all types, includes keySlug, displayTitle(), and displayFull()
+// - For NUMBER, includes min, max, minKey, and maxKey for defining splitpoints
 def getValues(devicePrefix) {
     def attribute = settings["${devicePrefix}Device"]?.getSupportedAttributes()?.find { it.name == settings["${devicePrefix}AttributeName"] }
 
@@ -172,43 +169,59 @@ def getValues(devicePrefix) {
             // and return the values for each splitpoint
             def splitpointCount = state["${devicePrefix}SplitpointCount"]
             return (0..splitpointCount).collect { i ->
-                ["range${i}", splitpointToRange(devicePrefix, i, true)]
+                def previousSplitpointKey = i > 0 ? "${devicePrefix}_Splitpoint_${i-1}" : null
+                def splitpointKey = i < splitpointCount ? "${devicePrefix}_Splitpoint_${i}" : null
+                def previousSplitpoint = settings[previousSplitpointKey]
+                def splitpoint = settings[splitpointKey]
+                [
+                    keySlug: "range${i}",
+                    min: previousSplitpoint,
+                    max: splitpoint,
+                    minKey: previousSplitpointKey,
+                    maxKey: splitpointKey,
+                    displayTitle: { rangeToDisplayString(previousSplitpoint, splitpoint, splitpointCount == 0, false) },
+                    displayFull: { rangeToDisplayString(previousSplitpoint, splitpoint, splitpointCount == 0, true) }
+                ]
             }
         case "STRING":
             // TODO: Support string values
             return []
         case "ENUM":
             // For ENUM, the value is the same as the display name
-            return attribute.getValues().collect { [it, it] }
+            return attribute.getValues().collect {
+                def title = { it }
+                [
+                    keySlug: it,
+                    displayTitle: title,
+                    displayFull: title
+                ]
+             }
         default:
             log.warn "Input attribute ${devicePrefix} has an unsupported type (${attribute.dataType})"
             return []
     }
 }
 
-String splitpointToRange(devicePrefix, i, includeEndpoint) {
-    def isLast = (i == state["${devicePrefix}SplitpointCount"])
-    def value = settings["${devicePrefix}_Splitpoint_${i}"]
-    def previous = settings["${devicePrefix}_Splitpoint_${i-1}"]
-    def result = ""
+static String rangeToDisplayString(min, max, only = false, includeEndpoint = true) {
+    max = max && max % 1 == 0 ? max.toInteger() : max
+    min = min && min % 1 == 0 ? min.toInteger() : min
 
-    value = value && value % 1 == 0 ? value.toInteger() : value
-    previous = previous && previous % 1 == 0 ? previous.toInteger() : previous
+    String result
 
-    if( i == 0 && isLast ) {
+    if( min == null && max == null && only ) {
         // No splitpoints
         result = "any value"
-    } else if( isLast ) {
-        result = "greater than ${previous ?: "something"}"
-    } else if( i == 0 ) {
+    } else if( max == null && includeEndpoint ) {
+        result = "greater than ${min ?: "something"}"
+    } else if( min == null ) {
         result = "less than"
         if( includeEndpoint ) {
-            result += " ${value ?: "something"}"
+            result += " ${max ?: "something"}"
         }
     } else {
-        result = "from ${previous ?: "one thing"} to"
+        result = "from ${min ?: "one thing"} to"
         if( includeEndpoint ) {
-            result += " ${previous ?: "another"}"
+            result += " ${max ?: "another"}"
         }
     }
     return result
@@ -217,7 +230,7 @@ String splitpointToRange(devicePrefix, i, includeEndpoint) {
 void appButtonHandler(String button) {
     debug "Button pressed: ${button}"
     def components = button.split("_")
-    if( components.size() != 4 ) {
+    if( components.size() != 3 ) {
         log.warn "Invalid button name ${button}"
         return
     }
@@ -233,7 +246,7 @@ void appButtonHandler(String button) {
         return
     }
 
-    def index = components[3].toInteger()
+    def index = components[2].toInteger()
 
     if (outputCapability) {
         def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }?.properties
@@ -252,11 +265,12 @@ void appButtonHandler(String button) {
         action == "Divide" ? 1 : -1 : 0;
 
     if( action == "Divide" ) {
-        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] + 1
+        def oldSplitpointCount = state["${devicePrefix}SplitpointCount"] ?: 0
+        state["${devicePrefix}SplitpointCount"] = oldSplitpointCount + 1;
     }
 
-    def firstValues = getValues("first").collect{it[0]}
-    def secondValues = getValues("second").collect{it[0]}
+    def firstValues = getValues("first")*.keySlug
+    def secondValues = getValues("second")*.keySlug
 
     // --- Data structure to hold dynamic info for first/second ---
     def deviceContext = [
@@ -282,7 +296,7 @@ void appButtonHandler(String button) {
                 // Divide: Shift elements from 'index' onwards UP by 1.
                 // Source: i, Dest: i+1
                 // Iterate from last element down to index.
-                currentRange = (currentValues.size() - 1)..index // Inclusive range
+                currentRange = (currentValues.size() - 2)..index // Inclusive range
             } else { // action == "Delete"
                 // Delete: Shift elements from 'index' + 1 onwards DOWN by 1.
                 // Source: i, Dest: i-1
@@ -349,6 +363,15 @@ void appButtonHandler(String button) {
         }
     }
     if( action == "Delete" ) {
+        (index..<state["${devicePrefix}SplitpointCount"]).each { i ->
+            def oldKey = "${devicePrefix}_Splitpoint_${i + 1}"
+            def newKey = "${devicePrefix}_Splitpoint_${i}"
+            debug "Renaming ${oldKey} to ${newKey}"
+            if( settings[oldKey] != null ) {
+                app.updateSetting(newKey, settings[oldKey])
+            }
+            app.clearSetting(oldKey)
+        }
         state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] - 1;
         cleanup()
     }
@@ -361,8 +384,8 @@ void updated() {
 }
 
 void cleanup() {
-    def firstValues = getValues("first").collect{it[0]}
-    def secondValues = getValues("second").collect{it[0]}
+    def firstValues = getValues("first")*.keySlug
+    def secondValues = getValues("second")*.keySlug
     def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
 
     def goodKeys = outputProperties.collect { out ->
