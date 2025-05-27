@@ -126,16 +126,21 @@ Map mainPage() {
                     def firstValues = getValues("first")
                     def secondValues = getValues("second")
                     def outputValues = (outputAttribute?.getValues() ?: []) + [UNCHANGED];
+                    debug "Input values for first device are ${firstValues.inspect()}"
+                    debug "Input values for second device are ${secondValues.inspect()}"
+                    debug "Output values for ${prop} are ${outputValues.inspect()}"
 
                     for (def firstValue in firstValues) {
+                        debug "First value is ${firstValue.inspect()}"
                         def firstKey = firstValue.keySlug
                         def firstDisplay = firstValue.displayFull()
+                        debug "First key is ${firstKey}, display is ${firstDisplay}"
                         int numOptions = Math.max(secondValues.size(), 1);
                         int width = Math.max(Math.floor(12.0 / numOptions), 1);
 
                         for (def secondValue in secondValues) {
-                            def secondKey = secondValue.keySlug
-                            def secondDisplay = secondValue.displayFull()
+                            def secondKey = secondValue?.keySlug
+                            def secondDisplay = secondValue?.displayFull()
 
                             def heading = "When ${firstDevice} ${firstAttributeName} is ${firstDisplay}"
                             if( secondValue != null ) {
@@ -190,12 +195,13 @@ def getValues(devicePrefix) {
         case "ENUM":
             // For ENUM, the value is the same as the display name
             return attribute.getValues().collect {
-                def title = { it }
+                def title = it.toString()
+                def titleClosure = { title }
                 [
                     keySlug: it,
                     exact: it,
-                    displayTitle: title,
-                    displayFull: title
+                    displayTitle: titleClosure,
+                    displayFull: titleClosure
                 ]
              }
         default:
@@ -243,7 +249,7 @@ void appButtonHandler(String button) {
     }
 
     def devicePrefix = components[1]
-    if( !["first", "second"].contains(devicePrefix) ) {
+    if( !PREFIXES.contains(devicePrefix) ) {
         log.warn "Invalid device prefix ${devicePrefix} in button name ${button}"
         return
     }
@@ -289,7 +295,7 @@ void appButtonHandler(String button) {
     ]
 
     // --- Loop to reduce duplication for range calculation ---
-    ["first", "second"].each { currentPrefix ->
+    PREFIXES.each { currentPrefix ->
         def currentValues = deviceContext[currentPrefix].values
         def currentRange
 
@@ -405,7 +411,7 @@ void cleanup() {
 
     toRemove.each { app.clearSetting(it) }
 
-    ["first", "second"].each { devicePrefix ->
+    PREFIXES.each { devicePrefix ->
         def splitpointCount = state["${devicePrefix}SplitpointCount"].toInteger() ?: 0
         debug "Cleaning up splitpoints for ${devicePrefix} with count ${splitpointCount}"
         // Remove splitpoints that are no longer needed
@@ -449,9 +455,9 @@ void initialize() {
     [[firstDevice,firstAttributeName], [secondDevice,secondAttributeName]].each {
         def device = it[0];
         def attribute = it[1];
-        debug "Subscribing to ${device} ${attribute}"
 
         if( device && attribute ) {
+            debug "Subscribing to ${device} ${attribute}"
             subscribe(device, attribute, "updateState")
         }
     }
@@ -465,69 +471,77 @@ void updateState(evt = null) {
     def description = evt?.descriptionText
 
     if( evt ) {
-        debug "Received ${property} ${value} from ${source} ${description ?: ""}"
-        description = description ?: " ${source} ${property} became ${value}"
+        debug "Received ${property} ${value} from ${source} (${description ?: ""})"
+        description = description ?: "${source} ${property} became ${value}"
     }
 
-    def firstValue = firstDevice?.currentValue(firstAttributeName);
-    def secondValue = secondDevice?.currentValue(secondAttributeName);
-    def outputProperties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
+    def childDevice = getChildDevice();
+    childDevice.parse(
+        parent.getDeviceTypes().
+        find { it.capability == outputCapability }.
+        properties.
+        collect { outputAttribute ->
+            def output = childDevice.getSupportedAttributes().find { it.name == outputAttribute };
+            def outputType = output.dataType;
 
-    if ( firstValue != null ) {
-        if( firstDevice && firstAttributeName && outputCapability ) {
-            def properties = parent.getDeviceTypes().find { it.capability == outputCapability }.properties
-            getChildDevice().parse(outputProperties.collect {
-                [
-                    name: it,
-                    value: outputFromInputs(it, firstValue, secondValue),
-                    descriptionText: description
-                ]
-            }.findAll{ it.value != UNCHANGED && it.value != null }
-            );
-        }
-    }
+            def keySlugs = PREFIXES.collect { devicePrefix ->
+                def device = settings["${devicePrefix}Device"];
+                def attributeName = settings["${devicePrefix}AttributeName"];
+                def attributeType = device?.getSupportedAttributes()?.find { it.name == attributeName }?.dataType;
+                def inputValue = device?.currentValue(attributeName);
+                if( !device || !attributeName || !attributeType || inputValue == null ) {
+                    debug "No device or attribute for ${devicePrefix} input"
+                    return null;
+                }
+
+                def options = getValues(devicePrefix);
+                def defaultKey = null;
+                switch (attributeType) {
+                    case "NUMBER":
+                        // For NUMBER, we need to check ranges
+                        def range = options.find {
+                            (inputValue >= it.min || it.min == null) &&
+                            (inputValue < it.max || it.max == null) };
+                        if( range ) {
+                            return range.keySlug;
+                        }
+                        log.warn "No match for ${devicePrefix} value ${inputValue}, using range ${options.inspect()}"
+                        return null;
+                    // For ENUM and STRING, we need to find the exact
+                    // match; the only difference is that STRING has a
+                    // default option.
+                    case "STRING":
+                        defaultKey = DEFAULT;
+                        // Deliberate fallthrough
+                    case "ENUM":
+                        return options.find { it.exact == inputValue }?.keySlug ?: defaultKey;
+                    default:
+                        log.warn "Input attribute ${devicePrefix} has an unsupported type (${attributeType})"
+                        return null;
+                }
+            };
+            // Directly producing it here works for ENUM and simple STRINGs;
+            // NUMBERs and complex STRINGs will require more intermediate
+            // logic.
+            def outputOption = getValue(outputAttribute, keySlugs.first(), keySlugs.last());
+            [
+                name: outputAttribute,
+                value: outputOption,
+                descriptionText: description
+            ]
+        }.findAll{ it.value != UNCHANGED && it.value != null }
+    );
 }
 
-private outputFromInputs(outputAttribute, firstValue, secondValue) {
-    def values = [
-        firstIn: firstValue,
-        firstKey: null,
-        secondIn: secondValue,
-        secondKey: null
-    ];
-
-    ["first", "second"].each { devicePrefix ->
-        def options = getValues(devicePrefix);
-        def inputValue = values["${devicePrefix}In"];
-        values["${devicePrefix}Key"] = options.find { it.exact == inputValue }?.keySlug;
-        if( !values["${devicePrefix}Key"] ) {
-            // If we don't have an exact match, try to find a range
-            def range = options.find {
-                (inputValue >= it.min || it.min == null) &&
-                (inputValue < it.max || it.max == null) };
-            if( range ) {
-                values["${devicePrefix}Key"] = range.keySlug;
-            }
-            log.warn "No match for ${devicePrefix} value ${inputValue}, using range ${options.inspect()}"
-        }
-    }
-
-    def result = getValue(outputAttribute, values.firstKey, values.secondKey);
-    debug "Output for ${outputAttribute} with first ${values.firstIn} (${values.firstKey}) and second ${values.secondIn} (${values.secondKey}) is ${result}"
-    // UNCHANGED is a special value that is handled by
-    // the caller; other specials are handled here. (TODO)
-    return result ?: UNCHANGED;
-}
-
-private getValue(outputAttribute, firstValue, secondValue = null) {
-    def key = constructKey(outputAttribute, firstValue, secondValue);
+private getValue(outputAttribute, firstValueKey, secondValueKey = null) {
+    def key = constructKey(outputAttribute, firstValueKey, secondValueKey);
     return settings[key];
 }
 
-private constructKey(outputAttribute, firstValue, secondValue = null) {
-    def key = "${outputAttribute}-${firstValue}"
-    if( secondValue != null ) {
-        key += "-${secondValue}"
+private constructKey(outputAttribute, firstValueKey, secondValueKey = null) {
+    def key = "${outputAttribute}-${firstValueKey}"
+    if( secondValueKey != null ) {
+        key += "-${secondValueKey}"
     }
     return key
 }
@@ -543,3 +557,5 @@ void debug(String msg) {
 }
 
 @Field static final String UNCHANGED = "(unchanged)"
+@Field static final String DEFAULT = "__DEFAULT__"
+@Field static final String[] PREFIXES = ["first", "second"]
