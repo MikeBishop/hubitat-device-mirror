@@ -107,25 +107,19 @@ Map mainPage() {
                     /*
                         TODO: Non-enum types will come later
 
-                        If the inputs are enums, just build a selector for each combination.
-                        If a given device is a number, first have splitpoints,
-                        then build a selector for each range.
-                        If a given device is a string, assemble a list of
-                        possible values and build a selector for each, plus
-                        "anything else"
-
                         If outputs are strings, have a text box (support
-                        variables?)
-
-                        If outputs are numbers, support:
-                        - Fixed
-                        - Variable plus fixed offset
-                        - Input (if number) plus fixed/variable/other-input offset
+                        variables?) or UNCHANGED
                         */
+
+                    def numVars = getGlobalVarsByType("NUMBER").collect { it.key };
 
                     def firstValues = getValues("first")
                     def secondValues = getValues("second")
-                    def outputValues = (outputAttribute?.getValues() ?: []) + [UNCHANGED];
+                    def outputType = outputAttribute?.dataType;
+                    def outputValues = [];
+                    if( outputType == "ENUM" ) {
+                        outputValues = (outputAttribute?.getValues() ?: []) + [UNCHANGED];
+                    }
                     debug "Input values for first device are ${firstValues.inspect()}"
                     debug "Input values for second device are ${secondValues.inspect()}"
                     debug "Output values for ${prop} are ${outputValues.inspect()}"
@@ -148,9 +142,35 @@ Map mainPage() {
                             }
                             heading += "..."
 
-                            input constructKey(prop, firstKey, secondKey), "enum", options: outputValues, width: width,
-                                title: heading, submitOnChange: true, required: true
+                            switch (outputAttribute?.dataType) {
+                                case "STRING":
+                                case "NUMBER":
+                                    def key = constructKey(prop, firstKey, secondKey)
+                                    input constructKey(prop, firstKey, secondKey), "text",
+                                        title: heading, defaultValue: '',
+                                        width: width, submitOnChange: true
+                                    break;
+                                case "ENUM":
+                                    input constructKey(prop, firstKey, secondKey), "enum", options: outputValues, width: width,
+                                        title: heading, submitOnChange: true, required: true
+                                    break;
+                                default:
+                                    log.warn "Output attribute ${prop} has an unsupported type (${outputAttribute.dataType})"
+                                    paragraph "Output attribute ${prop} has an unsupported type (${outputAttribute.dataType})"
+                                    app.clearSetting(constructKey(prop, firstKey, secondKey));
+                                    break;
+                            }
                         }
+                    }
+                    if( ["NUMBER", "STRING"].contains(outputAttribute?.dataType)) {
+                        paragraph "Use %first% to refer to ${firstDevice} ${firstAttributeName}, " +
+                                  "%second% to refer to ${secondDevice} ${secondAttributeName}, " +
+                                  "and %current% to refer to the current output ${outputAttribute} value. " +
+                                  "Use global variables like %varname%. " +
+                                  "Escape percent signs with a backslash (\\%) if you want to use them literally."
+                        paragraph "Basic math (+ - * /) is supported, e.g., %first% + 10 or %second% / 2. " +
+                                  "You can use parentheses to control precedence, e.g., (%first% + %second%) * 2."
+                        paragraph "Leave the field empty to leave the value unchanged."
                     }
                 }
             }
@@ -161,7 +181,7 @@ Map mainPage() {
 // Returns array of objects, types varying by attribute type:
 // - For all types, includes keySlug, displayTitle(), and displayFull()
 // - For NUMBER, includes min, max, minKey, and maxKey for defining splitpoints
-// - For ENUM and STRING, includes exact
+// - For ENUM and STRING, includes exact and matchAll
 def getValues(devicePrefix) {
     def attribute = settings["${devicePrefix}Device"]?.getSupportedAttributes()?.find { it.name == settings["${devicePrefix}AttributeName"] }
 
@@ -186,7 +206,8 @@ def getValues(devicePrefix) {
                     minKey: previousSplitpointKey,
                     maxKey: splitpointKey,
                     displayTitle: { rangeToDisplayString(previousSplitpoint, splitpoint, splitpointCount == 0, false) },
-                    displayFull: { rangeToDisplayString(previousSplitpoint, splitpoint, splitpointCount == 0, true) }
+                    displayFull: { rangeToDisplayString(previousSplitpoint, splitpoint, splitpointCount == 0, true) },
+                    matchAll: splitpointCount == 0
                 ]
             }
         case "STRING":
@@ -201,7 +222,8 @@ def getValues(devicePrefix) {
                     keySlug: it,
                     exact: it,
                     displayTitle: titleClosure,
-                    displayFull: titleClosure
+                    displayFull: titleClosure,
+                    matchAll: false
                 ]
              }
         default:
@@ -524,6 +546,25 @@ void updateState(evt = null) {
             // NUMBERs and complex STRINGs will require more intermediate
             // logic.
             def outputOption = getValue(outputAttribute, keySlugs.first(), keySlugs.last());
+            if( !outputOption ) {
+                // If no value is set, we use UNCHANGED
+                outputOption = UNCHANGED;
+            }
+            else {
+                if (["NUMBER", "STRING"].contains(outputType)) {
+                    // For NUMBER and STRING, we need to process the value
+                    outputOption = processString(outputOption ?: "", outputAttribute);
+                }
+                if( outputType == "NUMBER" ) {
+                    if( outputOption == null || !outputOption.isNumber() ) {
+                        log.warn "Output value for ${outputAttribute} is not a number: ${outputOption}"
+                        outputOption = UNCHANGED;
+                    }
+                    else if( outputOption.isNumber() ) {
+                        outputOption = outputOption.toBigDecimal();
+                    }
+                }
+            }
             [
                 name: outputAttribute,
                 value: outputOption,
@@ -559,3 +600,199 @@ void debug(String msg) {
 @Field static final String UNCHANGED = "(unchanged)"
 @Field static final String DEFAULT = "__DEFAULT__"
 @Field static final String[] PREFIXES = ["first", "second"]
+
+
+// --- Shunting-Yard Algorithm Components (retained from previous interactions) ---
+
+@Field static final Map operatorPrecedence = [
+    '+': 1,
+    '-': 1,
+    '*': 2,
+    '/': 2
+]
+
+def isOperator(token) {
+    operatorPrecedence.containsKey(token)
+}
+
+def applyOperation(op, val1, val2) {
+    switch (op) {
+        case '+': return val1 + val2
+        case '-': return val1 - val2
+        case '*': return val1 * val2
+        case '/':
+            if (val2 == 0) throw new ArithmeticException("Division by zero")
+            return val1 / val2
+        default: throw new IllegalArgumentException("Unknown operator: $op")
+    }
+}
+
+def evaluateMathExpression(List<String> tokens) {
+    if (tokens.isEmpty()) return ''
+
+    def outputQueue = []
+    def operatorStack = []
+
+    debug "Evaluating math expression with tokens: ${tokens.inspect()}"
+
+    for (token in tokens) {
+        if (token.isNumber()) { // Groovy's isNumber() handles decimals
+            outputQueue.add(token as BigDecimal)
+        } else if (isOperator(token)) {
+            while (!operatorStack.isEmpty() && isOperator(operatorStack.last()) &&
+                   operatorPrecedence[operatorStack.last()] >= operatorPrecedence[token]) {
+                outputQueue.add(operatorStack.pop())
+            }
+            operatorStack.push(token)
+        } else if (token == '(') {
+            operatorStack.push(token)
+        } else if (token == ')') {
+            while (!operatorStack.isEmpty() && operatorStack.last() != '(') {
+                outputQueue.add(operatorStack.pop())
+            }
+            if (!operatorStack.isEmpty() && operatorStack.last() == '(') {
+                operatorStack.pop()
+            } else {
+                throw new IllegalArgumentException("Mismatched parentheses")
+            }
+        } else {
+            throw new IllegalArgumentException("Unexpected token in math expression: $token")
+        }
+    }
+
+    while (!operatorStack.isEmpty()) {
+        if (operatorStack.last() == '(' || operatorStack.last() == ')') {
+            throw new IllegalArgumentException("Mismatched parentheses")
+        }
+        outputQueue.add(operatorStack.pop())
+    }
+
+    def evaluationStack = []
+    for (token in outputQueue) {
+        if (token instanceof BigDecimal) {
+            evaluationStack.push(token)
+        } else {
+            if (evaluationStack.size() < 2) {
+                throw new IllegalArgumentException("Insufficient operands for operator: $token")
+            }
+            def val2 = evaluationStack.pop()
+            def val1 = evaluationStack.pop()
+            evaluationStack.push(applyOperation(token, val1, val2))
+        }
+    }
+
+    if (evaluationStack.size() != 1) {
+        throw new IllegalArgumentException("Invalid expression. Leftover operands or operators.")
+    }
+    debug "Final evaluation stack: ${evaluationStack.inspect()}"
+
+    return evaluationStack.pop()
+}
+
+
+// --- Main Processing Function ---
+
+def processString(String inputString, String outputAttribute) {
+    debug "Processing input string: ${inputString} for output attribute: ${outputAttribute}"
+    // Step 1: Variable Extraction and Substitution
+    // Define a highly unlikely placeholder string
+    def ESCAPED_PERCENT_PLACEHOLDER = "__ESCAPED_PERCENT_MARKER_UNIQUE_12345__"
+
+    // Pass 1: Replace all escaped percents (\%) with a temporary placeholder
+    def tempStringForVars = inputString.replaceAll(/\\%/, ESCAPED_PERCENT_PLACEHOLDER)
+
+    def substitutedString = tempStringForVars.replaceAll(/%([^%]+)%/) { match, varName ->
+        def trimmedVarName = varName.trim()
+        def resolvedValue
+
+        if (PREFIXES.contains(trimmedVarName)) {
+            def device = settings["${trimmedVarName}Device"]
+            def attributeName = settings["${trimmedVarName}AttributeName"]
+            def inputValue = device?.currentValue(attributeName)
+            resolvedValue = inputValue
+        } else if (trimmedVarName == 'current') {
+            def childDevice = getChildDevice()
+            def inputValue = childDevice?.currentValue(outputAttribute)
+            resolvedValue = inputValue
+        } else {
+            def globalVar = getGlobalVar(trimmedVarName)
+            if( globalVar ) {
+                resolvedValue = globalVar.value
+            } else {
+                // If it's not a global variable, don't substitute it.
+                resolvedValue = match
+            }
+            resolvedValue = getGlobalVar(trimmedVarName)?.value
+        }
+        return resolvedValue != null ? resolvedValue.toString() : ''
+    }
+
+    // Pass 3: Restore the literal percent signs from the placeholders
+    substitutedString = substitutedString.replaceAll(ESCAPED_PERCENT_PLACEHOLDER, "%")
+    debug "Substituted string: ${substitutedString}"
+
+    // Step 2: Extract and parse math segments using replaceAll
+    def MATH_ATOM_PATTERN_TEXT = /(?:(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))|[+\-*\/()])/
+    def mathTokenFinder = ~ /(${MATH_ATOM_PATTERN_TEXT})/ // Used for tokenizing
+    def mathExpressionPattern = ~/((${MATH_ATOM_PATTERN_TEXT}(?:\s*${MATH_ATOM_PATTERN_TEXT})*))/ // Main match
+
+    def finalString = substitutedString.replaceAll(mathExpressionPattern) { allMatches ->
+        def fullMatch = allMatches[0] // The entire matched segment
+        debug "Value of 'fullMatch': '${fullMatch.inspect()}'" // Print value to see what it contains
+
+        // If the entire matched segment is a simple number (positive, negative, or decimal),
+        // return it directly. Groovy's `isNumber()` handles this effectively.
+        if (fullMatch.isNumber()) {
+            return fullMatch
+        }
+
+        // If it's not a simple number, proceed with tokenization and full evaluation
+        def rawTokens = fullMatch.findAll(mathTokenFinder)
+        debug "Raw tokens for evaluation: ${rawTokens.inspect()}"
+
+        // This logic runs only for expressions that are NOT simple numbers,
+        // e.g., "5 + -2", "(-5) * 2"
+        def tokensForEvaluation = []
+        boolean expectingValue = true
+
+        rawTokens.each { token ->
+            if (token.isNumber()) {
+                tokensForEvaluation.add(token)
+                expectingValue = false
+            } else if (token == '(') {
+                tokensForEvaluation.add(token)
+                expectingValue = true
+            } else if (token == ')') {
+                tokensForEvaluation.add(token)
+                expectingValue = false
+            } else if (isOperator(token)) {
+                if ((token == '-' || token == '+') && expectingValue) {
+                    tokensForEvaluation.add("0")
+                    tokensForEvaluation.add(token)
+                    expectingValue = true
+                } else if (!expectingValue) {
+                    tokensForEvaluation.add(token)
+                    expectingValue = true
+                } else {
+                    tokensForEvaluation.add(token)
+                    expectingValue = true
+                }
+            } else {
+                tokensForEvaluation.add(token)
+                expectingValue = false
+            }
+        }
+        debug "Tokens for evaluation: ${tokensForEvaluation.inspect()}"
+
+        try {
+            def result = evaluateMathExpression(tokensForEvaluation)
+            debug "Math evaluation result: ${result}"
+            return result.toString()
+        } catch (e) {
+            log.warn "Math evaluation failed for expression '$fullMatch'. Error: ${e.message}"
+            return fullMatch
+        }
+    }
+
+    return finalString.trim()
+}
