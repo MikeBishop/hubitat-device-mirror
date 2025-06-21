@@ -42,7 +42,7 @@ Map mainPage() {
                 if(settings[deviceKey] ) {
                     def inputDevice = settings[deviceKey]
                     def attributeKey = "${devicePrefix}AttributeName"
-                    def acceptableAttributes = inputDevice.getSupportedAttributes()?.findAll{ ["NUMBER", "ENUM"].contains(it.dataType) };
+                    def acceptableAttributes = inputDevice.getSupportedAttributes()?.findAll{ ["STRING", "NUMBER", "ENUM"].contains(it.dataType) };
                     if (acceptableAttributes?.size() > 1) {
                         input attributeKey, "enum",
                             options: acceptableAttributes.collect{ it.name },
@@ -59,10 +59,20 @@ Map mainPage() {
 
                     if( settings[attributeKey] ) {
                         def attribute = acceptableAttributes.find { it.name == settings[attributeKey] }
+                        if( settings[NEW_STRING]) {
+                            def newValue = settings[NEW_STRING].trim()
+                            def newIndex = state["${devicePrefix}StringCount"] ?: 0
+                            def newKey = "${devicePrefix}_String_${newIndex}"
+
+                            app.updateSetting(newKey, newValue) // Populate the new string value
+                            app.clearSetting(NEW_STRING) // Clear the input field
+                            debug "New string value added: ${newValue} at index ${newIndex}"
+                            state["${devicePrefix}StringCount"] = (state["${devicePrefix}StringCount"] ?: 0) + 1;
+                        }
+                        def values = getValues(devicePrefix)
                         switch(attribute.dataType) {
                             case "NUMBER":
                                 // Need to build a list of splitpoints
-                                def values = getValues(devicePrefix)
                                 debug "Values for ${devicePrefix} are ${values.inspect()}"
                                 values.eachWithIndex { value, i ->
                                     debug "Adding input for ${devicePrefix} ${value.keySlug} (${value.inspect()})"
@@ -84,6 +94,17 @@ Map mainPage() {
                                 break;
                             case "STRING":
                                 // Similar, but for list of strings
+                                values.eachWithIndex { value, i ->
+                                    debug "Adding input for ${devicePrefix} ${value.keySlug} (${value.inspect()})"
+                                    if( !value.matchAll ) {
+                                        input value.keySlug, "text", title: null,
+                                            required: true, submitOnChange: true, width: 9
+                                        input "Delete_${devicePrefix}_${i}", "button", title: "Delete", submitOnChange: true, width: 3
+                                    } else {
+                                        input NEW_STRING, "text", title: "Add a new value",
+                                            required: false, submitOnChange: true, width: 9
+                                    }
+                                }
                                 break;
                             case "ENUM":
                                 // Nothing to do for ENUM
@@ -211,8 +232,26 @@ def getValues(devicePrefix) {
                 ]
             }
         case "STRING":
-            // TODO: Support string values
-            return []
+            def numValues = state["${devicePrefix}StringCount"] ?: 0
+            def anyString = "any ${numValues > 0 ? "other " : ""}value"
+            return (0..<numValues).collect { i ->
+                def key = "${devicePrefix}_String_${i}"
+                def value = settings[key]
+                [
+                    keySlug: key,
+                    exact: value,
+                    displayTitle: { value },
+                    displayFull: { value },
+                    matchAll: false
+                ]
+            } + // Add a default option for STRING attributes
+            [
+                keySlug: DEFAULT,
+                exact: null,
+                displayTitle: { anyString },
+                displayFull: { anyString },
+                matchAll: true
+            ]
         case "ENUM":
             // For ENUM, the value is the same as the display name
             return attribute.getValues().collect {
@@ -275,6 +314,20 @@ void appButtonHandler(String button) {
         log.warn "Invalid device prefix ${devicePrefix} in button name ${button}"
         return
     }
+    def attribute = settings["${devicePrefix}Device"]?.getSupportedAttributes()?.find { it.name == settings["${devicePrefix}AttributeName"] }
+    def noun = "UNKNOWN"
+    switch(attribute?.dataType) {
+        case "NUMBER":
+            noun = "Splitpoint"
+            break;
+        case "STRING":
+            noun = "String"
+            break;
+        case "ENUM":
+        default:
+            log.warn "Input attribute ${attribute} has an unsupported type (${attribute?.dataType}) for action ${action}"
+            return;
+    }
 
     def index = components[2].toInteger()
 
@@ -295,8 +348,8 @@ void appButtonHandler(String button) {
         action == "Divide" ? 1 : -1 : 0;
 
     if( action == "Divide" ) {
-        def oldSplitpointCount = state["${devicePrefix}SplitpointCount"] ?: 0
-        state["${devicePrefix}SplitpointCount"] = oldSplitpointCount + 1;
+        def oldSplitpointCount = state["${devicePrefix}${noun}Count"] ?: 0
+        state["${devicePrefix}${noun}Count"] = oldSplitpointCount + 1;
     }
 
     def firstValues = getValues("first")*.keySlug
@@ -393,16 +446,16 @@ void appButtonHandler(String button) {
         }
     }
     if( action == "Delete" ) {
-        (index..<state["${devicePrefix}SplitpointCount"]).each { i ->
-            def oldKey = "${devicePrefix}_Splitpoint_${i + 1}"
-            def newKey = "${devicePrefix}_Splitpoint_${i}"
+        (index..<state["${devicePrefix}${noun}Count"]).each { i ->
+            def oldKey = "${devicePrefix}_${noun}_${i + 1}"
+            def newKey = "${devicePrefix}_${noun}_${i}"
             debug "Renaming ${oldKey} to ${newKey}"
             if( settings[oldKey] != null ) {
                 app.updateSetting(newKey, settings[oldKey])
             }
             app.clearSetting(oldKey)
         }
-        state["${devicePrefix}SplitpointCount"] = state["${devicePrefix}SplitpointCount"] - 1;
+        state["${devicePrefix}${noun}Count"] = state["${devicePrefix}${noun}Count"] - 1;
         cleanup()
     }
 }
@@ -434,7 +487,7 @@ void cleanup() {
     toRemove.each { app.clearSetting(it) }
 
     PREFIXES.each { devicePrefix ->
-        def splitpointCount = state["${devicePrefix}SplitpointCount"].toInteger() ?: 0
+        def splitpointCount = state["${devicePrefix}SplitpointCount"]?.toInteger() ?: 0
         debug "Cleaning up splitpoints for ${devicePrefix} with count ${splitpointCount}"
         // Remove splitpoints that are no longer needed
         settings.keySet().findAll { it.startsWith("${devicePrefix}_Splitpoint_") }.each { key ->
@@ -517,7 +570,6 @@ void updateState(evt = null) {
                 }
 
                 def options = getValues(devicePrefix);
-                def defaultKey = null;
                 switch (attributeType) {
                     case "NUMBER":
                         // For NUMBER, we need to check ranges
@@ -533,18 +585,14 @@ void updateState(evt = null) {
                     // match; the only difference is that STRING has a
                     // default option.
                     case "STRING":
-                        defaultKey = DEFAULT;
-                        // Deliberate fallthrough
                     case "ENUM":
-                        return options.find { it.exact == inputValue }?.keySlug ?: defaultKey;
+                        return options.find { it.exact == inputValue }?.keySlug ?: options.find { it.matchAll }?.keySlug;
                     default:
                         log.warn "Input attribute ${devicePrefix} has an unsupported type (${attributeType})"
                         return null;
                 }
             };
-            // Directly producing it here works for ENUM and simple STRINGs;
-            // NUMBERs and complex STRINGs will require more intermediate
-            // logic.
+            // First, fetch the value stored
             def outputOption = getValue(outputAttribute, keySlugs.first(), keySlugs.last());
             if( !outputOption ) {
                 // If no value is set, we use UNCHANGED
@@ -599,10 +647,11 @@ void debug(String msg) {
 
 @Field static final String UNCHANGED = "(unchanged)"
 @Field static final String DEFAULT = "__DEFAULT__"
+@Field static final String NEW_STRING = "__NEW_STRING__"
 @Field static final String[] PREFIXES = ["first", "second"]
 
 
-// --- Shunting-Yard Algorithm Components (retained from previous interactions) ---
+// --- Shunting-Yard Algorithm Components ---
 
 @Field static final Map operatorPrecedence = [
     '+': 1,
@@ -768,9 +817,6 @@ def processString(String inputString, String outputAttribute) {
             } else if (isOperator(token)) {
                 if ((token == '-' || token == '+') && expectingValue) {
                     tokensForEvaluation.add("0")
-                    tokensForEvaluation.add(token)
-                    expectingValue = true
-                } else if (!expectingValue) {
                     tokensForEvaluation.add(token)
                     expectingValue = true
                 } else {
