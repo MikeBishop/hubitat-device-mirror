@@ -29,7 +29,7 @@ preferences {
 }
 
 Map mainPage() {
-    dynamicPage(name: "Main Page", title: "Filtered Device Mirror", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Filtered Device Mirror", install: true, uninstall: true) {
         section("General") {
             input "thisName", "text", title: "Name this Mirror Set"
 			if(thisName) app.updateLabel("$thisName")
