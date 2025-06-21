@@ -31,13 +31,14 @@ Map mainPage() {
                 options: parent.getDeviceTypes().collectEntries { [(it.capability): it.type] },
                 title: "Capability to produce", required: true, multiple: false, submitOnChange: true
 
-            [["first", true], ["second", false]].each { device ->
-                def devicePrefix = device[0]
-                def deviceKey = "${device[0]}Device"
-                def deviceLabel = "${device[0].capitalize()} input device"
-                def required = device[1]
+            attributes = [:]
 
-                input deviceKey, "capability.*", title: deviceLabel, required: required, multiple: false, submitOnChange: true
+            PREFIXES.each { devicePrefix ->
+                def deviceKey = "${devicePrefix}Device"
+                def deviceLabel = "${devicePrefix.capitalize()} input device"
+
+                input deviceKey, "capability.*", title: deviceLabel, required: devicePrefix == "first",
+                    multiple: false, submitOnChange: true
 
                 if(settings[deviceKey] ) {
                     def inputDevice = settings[deviceKey]
@@ -59,6 +60,7 @@ Map mainPage() {
 
                     if( settings[attributeKey] ) {
                         def attribute = acceptableAttributes.find { it.name == settings[attributeKey] }
+                        attributes[devicePrefix] = attribute
                         if( settings[NEW_STRING]) {
                             def newValue = settings[NEW_STRING].trim()
                             def newIndex = state["${devicePrefix}StringCount"] ?: 0
@@ -124,14 +126,6 @@ Map mainPage() {
             properties.each { prop ->
                 section("How to set ${prop}") {
                     def outputAttribute = getChildDevice().getSupportedAttributes().find { it.name == prop }
-
-                    /*
-                        TODO: Non-enum types will come later
-
-                        If outputs are strings, have a text box (support
-                        variables?) or UNCHANGED
-                        */
-
                     def numVars = getGlobalVarsByType("NUMBER").collect { it.key };
 
                     def firstValues = getValues("first")
@@ -183,14 +177,29 @@ Map mainPage() {
                             }
                         }
                     }
-                    if( ["NUMBER", "STRING"].contains(outputAttribute?.dataType)) {
-                        paragraph "Use %first% to refer to ${firstDevice} ${firstAttributeName}, " +
-                                  "%second% to refer to ${secondDevice} ${secondAttributeName}, " +
-                                  "and %current% to refer to the current output ${outputAttribute} value. " +
-                                  "Use global variables like %varname%. " +
-                                  "Escape percent signs with a backslash (\\%) if you want to use them literally."
-                        paragraph "Basic math (+ - * /) is supported, e.g., %first% + 10 or %second% / 2. " +
-                                  "You can use parentheses to control precedence, e.g., (%first% + %second%) * 2."
+                    if( ["NUMBER", "STRING"].contains(outputType) ) {
+                        def numbersOnly = outputType == "NUMBER";
+                        def variables = new StringBuilder();
+                        variables.append("Use ");
+                        def needAnd = false;
+                        PREFIXES.each { devicePrefix ->
+                            if( !numbersOnly || attributes[devicePrefix]?.dataType == "NUMBER" ) {
+                                variables.append("%${devicePrefix}% to refer to ${settings["${devicePrefix}Device"]} " +
+                                    "${settings["${devicePrefix}AttributeName"]}, ");
+                                needAnd = true;
+                            }
+                        }
+                        if( needAnd ) {
+                            variables.append("and ");
+                        }
+                        variables.append("%current% to refer to the current output ${outputAttribute} value. " +
+                                  "Use global variables like %varname%. ");
+                        if( !numbersOnly ) {
+                            variables.append("Escape percent signs with a backslash (\\%) if you want to use them literally.")
+                        }
+                        paragraph variables.toString()
+                        paragraph "Basic math (+ - * /) is supported, e.g., %foo% + 10 or %bar% / 2. " +
+                                  "You can use parentheses to control precedence, e.g., (%baz% + %biff%) * 2."
                         paragraph "Leave the field empty to leave the value unchanged."
                     }
                 }
