@@ -507,7 +507,6 @@ void uninstalled() {
 }
 
 private getChildDevice() {
-    def dni = "Filtered-" + app.id.toString()
     def type = parent.getDeviceTypes().find { it.capability == outputCapability }
     def existing = parent.fetchChildDevice(dni, thisName, type.namespace, type.driver)
     def capabilityName = outputCapability - "capability."

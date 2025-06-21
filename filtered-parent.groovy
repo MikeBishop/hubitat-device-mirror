@@ -136,6 +136,14 @@ void removeChildrenExcept(String property, List childIds) {
 
 }
 
+void deleteChildDevice(childId) {
+    def child = getChildDevice(childId)
+    if (child) {
+        debug "Deleting ${child}"
+        deleteChildDevice(child.deviceNetworkId)
+    }
+}
+
 def debug(msg) {
 	if (debugLogging) {
     	log.debug msg
