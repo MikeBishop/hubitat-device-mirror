@@ -69,7 +69,7 @@ Map mainPage() {
                             app.updateSetting(newKey, newValue) // Populate the new string value
                             app.clearSetting(NEW_STRING) // Clear the input field
                             debug "New string value added: ${newValue} at index ${newIndex}"
-                            state["${devicePrefix}StringCount"] = (state["${devicePrefix}StringCount"] ?: 0) + 1;
+                            state["${devicePrefix}StringCount"] = newIndex + 1;
                         }
                         def values = getValues(devicePrefix)
                         switch(attribute.dataType) {
@@ -126,8 +126,6 @@ Map mainPage() {
             properties.each { prop ->
                 section("How to set ${prop}") {
                     def outputAttribute = getChildDevice().getSupportedAttributes().find { it.name == prop }
-                    def numVars = getGlobalVarsByType("NUMBER").collect { it.key };
-
                     def firstValues = getValues("first")
                     def secondValues = getValues("second")
                     def outputType = outputAttribute?.dataType;
@@ -135,6 +133,7 @@ Map mainPage() {
                     if( outputType == "ENUM" ) {
                         outputValues = (outputAttribute?.getValues() ?: []) + [UNCHANGED];
                     }
+
                     debug "Input values for first device are ${firstValues.inspect()}"
                     debug "Input values for second device are ${secondValues.inspect()}"
                     debug "Output values for ${prop} are ${outputValues.inspect()}"
@@ -219,6 +218,17 @@ def getValues(devicePrefix) {
         return [null]
     }
 
+    def createDisplayMap = { keySlug, match, displayString ->
+        def displayClosure = { displayString }
+        [
+            keySlug: keySlug,
+            exact: match,
+            displayTitle: displayClosure,
+            displayFull: displayClosure,
+            matchAll: match == null
+        ]
+    }
+
     switch(attribute.dataType) {
         case "NUMBER":
             // For NUMBER, we need to build a list of splitpoints
@@ -242,38 +252,15 @@ def getValues(devicePrefix) {
             }
         case "STRING":
             def numValues = state["${devicePrefix}StringCount"] ?: 0
-            def anyString = "any ${numValues > 0 ? "other " : ""}value"
             return (0..<numValues).collect { i ->
                 def key = "${devicePrefix}_String_${i}"
                 def value = settings[key]
-                [
-                    keySlug: key,
-                    exact: value,
-                    displayTitle: { value },
-                    displayFull: { value },
-                    matchAll: false
-                ]
+                createDisplayMap(key, value, value)
             } + // Add a default option for STRING attributes
-            [
-                keySlug: DEFAULT,
-                exact: null,
-                displayTitle: { anyString },
-                displayFull: { anyString },
-                matchAll: true
-            ]
+            createDisplayMap(DEFAULT, null, "any ${numValues > 0 ? "other " : ""}value") // Default option
         case "ENUM":
             // For ENUM, the value is the same as the display name
-            return attribute.getValues().collect {
-                def title = it.toString()
-                def titleClosure = { title }
-                [
-                    keySlug: it,
-                    exact: it,
-                    displayTitle: titleClosure,
-                    displayFull: titleClosure,
-                    matchAll: false
-                ]
-             }
+            return attribute.getValues().collect { createDisplayMap(it, it, it) }
         default:
             log.warn "Input attribute ${devicePrefix} has an unsupported type (${attribute.dataType})"
             return []
