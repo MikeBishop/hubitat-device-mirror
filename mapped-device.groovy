@@ -184,7 +184,7 @@ Map mainPage() {
                         def needAnd = false;
                         PREFIXES.each { devicePrefix ->
                             if( !numbersOnly || attributes[devicePrefix]?.dataType == "NUMBER" ) {
-                                variables.append("%${devicePrefix}% to refer to ${settings["${devicePrefix}Device"]} " +
+                                variables.append("<tt>%${devicePrefix}%</tt> to refer to ${settings["${devicePrefix}Device"]} " +
                                     "${settings["${devicePrefix}AttributeName"]}, ");
                                 needAnd = true;
                             }
@@ -192,14 +192,14 @@ Map mainPage() {
                         if( needAnd ) {
                             variables.append("and ");
                         }
-                        variables.append("%current% to refer to the current output ${outputAttribute} value. " +
-                                  "Use global variables like %varname%. ");
+                        variables.append("<tt>%current%</tt> to refer to the current output ${outputAttribute} value. " +
+                                  "Use global variables like <tt>%varname%</tt>. ");
                         if( !numbersOnly ) {
                             variables.append("Escape percent signs with a backslash (\\%) if you want to use them literally.")
                         }
                         paragraph variables.toString()
-                        paragraph "Basic math (+ - * /) is supported, e.g., %foo% + 10 or %bar% / 2. " +
-                                  "You can use parentheses to control precedence, e.g., (%baz% + %biff%) * 2."
+                        paragraph "Basic math (+ - * /) is supported, e.g., <tt>%foo% + 10</tt> or <tt>%bar% / 2</tt>. " +
+                                  "You can use parentheses to control precedence, e.g., <tt>(%baz% + %biff%) * 2</tt>."
                         paragraph "Leave the field empty to leave the value unchanged."
                     }
                 }
